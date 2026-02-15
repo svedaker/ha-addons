@@ -1,4 +1,5 @@
 
+0.1.12 Update dependencies for security vulnerabilities, added retaing flag on config messages (golang.org/x/net v0.50.0, paho.mqtt.golang v1.5.1)
 0.1.11 Fix none negative values for power 
 0.1.10 Handle set ON, OFF
 fix climax url
