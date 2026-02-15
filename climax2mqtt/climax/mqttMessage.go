@@ -9,6 +9,7 @@ import (
 type MqttMessage struct {
 	Topic   string
 	Message []byte
+	Retain  bool
 	Err     error
 }
 
@@ -26,9 +27,9 @@ func (ts TemperatureSensor) MqttDiscoveryMessageTemperature() MqttMessage {
 
 	jsonData, err := json.MarshalIndent(payload, "", "    ")
 	if err != nil {
-		return MqttMessage{topic, nil, err}
+		return MqttMessage{topic, nil, false, err}
 	}
-	return MqttMessage{topic, jsonData, nil}
+	return MqttMessage{topic, jsonData, true, nil}
 }
 
 func (psm PowerSwitchMeter) MqttDiscoveryMessagePower() MqttMessage {
@@ -45,9 +46,9 @@ func (psm PowerSwitchMeter) MqttDiscoveryMessagePower() MqttMessage {
 
 	jsonData, err := json.MarshalIndent(payload, "", "    ")
 	if err != nil {
-		return MqttMessage{topic, nil, err}
+		return MqttMessage{topic, nil, false, err}
 	}
-	return MqttMessage{topic, jsonData, nil}
+	return MqttMessage{topic, jsonData, true, nil}
 }
 
 func (psm PowerSwitchMeter) MqttDiscoveryMessageSwitch() MqttMessage {
@@ -68,9 +69,9 @@ func (psm PowerSwitchMeter) MqttDiscoveryMessageSwitch() MqttMessage {
 	// Marshaling the payload into JSON format
 	jsonData, err := json.MarshalIndent(payload, "", "    ")
 	if err != nil {
-		return MqttMessage{topic, nil, err}
+		return MqttMessage{topic, nil, false, err}
 	}
-	return MqttMessage{topic, jsonData, nil}
+	return MqttMessage{topic, jsonData, true, nil}
 }
 
 func (psm PowerSwitchMeter) MqttDiscoveryMessageEnergy() MqttMessage {
@@ -88,9 +89,9 @@ func (psm PowerSwitchMeter) MqttDiscoveryMessageEnergy() MqttMessage {
 
 	jsonData, err := json.MarshalIndent(payload, "", "    ")
 	if err != nil {
-		return MqttMessage{"", nil, err}
+		return MqttMessage{"", nil, false, err}
 	}
-	return MqttMessage{topic, jsonData, nil}
+	return MqttMessage{topic, jsonData, true, nil}
 }
 
 func (ts TemperatureSensor) MqttUpdateValueMessage() MqttMessage {
@@ -105,10 +106,10 @@ func (ts TemperatureSensor) MqttUpdateValueMessage() MqttMessage {
 	// Serialize the payload to JSON
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return MqttMessage{topic, nil, fmt.Errorf("error serializing temperature update to JSON: %w", err)}
+		return MqttMessage{topic, nil, false, fmt.Errorf("error serializing temperature update to JSON: %w", err)}
 	}
 
-	return MqttMessage{topic, jsonData, nil}
+	return MqttMessage{topic, jsonData, false, nil}
 }
 
 func (psm PowerSwitchMeter) MqttUpdateValueMessage() MqttMessage {
@@ -127,8 +128,8 @@ func (psm PowerSwitchMeter) MqttUpdateValueMessage() MqttMessage {
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return MqttMessage{"", nil, fmt.Errorf("error serializing power switch meter state update to JSON: %w", err)}
+		return MqttMessage{"", nil, false, fmt.Errorf("error serializing power switch meter state update to JSON: %w", err)}
 	}
 
-	return MqttMessage{topic, jsonData, nil}
+	return MqttMessage{topic, jsonData, false, nil}
 }

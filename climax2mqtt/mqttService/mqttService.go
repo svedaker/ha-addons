@@ -49,7 +49,7 @@ func Subscribe(client mqtt.Client, topic string, callback mqtt.MessageHandler) {
 	log.Printf("mqtt: Subscribed to topic %s", topic)
 }
 
-func Publish(client mqtt.Client, topic string, message interface{}) {
-	token := client.Publish(topic, 1, false, message)
+func Publish(client mqtt.Client, topic string, message interface{}, retain bool) {
+	token := client.Publish(topic, 1, retain, message)
 	token.Wait()
 }

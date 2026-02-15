@@ -149,5 +149,5 @@ func publishIfNoError(mqttMessage climax.MqttMessage, device climax.DeviceInterf
 		return
 	}
 	log.Printf("Publis to topic %s with message %s", mqttMessage.Topic, string(mqttMessage.Message))
-	mqttService.Publish(mqttClient, mqttMessage.Topic, mqttMessage.Message)
+	mqttService.Publish(mqttClient, mqttMessage.Topic, mqttMessage.Message, mqttMessage.Retain)
 }
