@@ -21,8 +21,15 @@ func (ts TemperatureSensor) MqttDiscoveryMessageTemperature() MqttMessage {
 		"state_topic":         fmt.Sprintf("climax2mqtt/sensors/%s/state", id),
 		"name":                fmt.Sprintf("%s Temperature", ts.Name),
 		"device_class":        "temperature",
+		"state_class":         "measurement",
 		"unit_of_measurement": "°C",
 		"value_template":      "{{ value_json.temperature }}",
+		"device": map[string]interface{}{
+			"identifiers":  []string{id},
+			"name":         ts.Name,
+			"manufacturer": "Climax",
+			"model":        "Temperature Sensor",
+		},
 	}
 
 	jsonData, err := json.MarshalIndent(payload, "", "    ")
@@ -40,8 +47,15 @@ func (psm PowerSwitchMeter) MqttDiscoveryMessagePower() MqttMessage {
 		"state_topic":         fmt.Sprintf("climax2mqtt/sensors/%s/state", id),
 		"name":                fmt.Sprintf("%s Power", psm.Name),
 		"device_class":        "power",
+		"state_class":         "measurement",
 		"unit_of_measurement": "W",
 		"value_template":      "{{ value_json.power }}",
+		"device": map[string]interface{}{
+			"identifiers":  []string{id},
+			"name":         psm.Name,
+			"manufacturer": "Climax",
+			"model":        "Power Switch Meter",
+		},
 	}
 
 	jsonData, err := json.MarshalIndent(payload, "", "    ")
@@ -64,6 +78,12 @@ func (psm PowerSwitchMeter) MqttDiscoveryMessageSwitch() MqttMessage {
 		"state_on":       "ON",
 		"state_off":      "OFF",
 		"value_template": "{{ value_json.power_state }}",
+		"device": map[string]interface{}{
+			"identifiers":  []string{id},
+			"name":         psm.Name,
+			"manufacturer": "Climax",
+			"model":        "Power Switch Meter",
+		},
 	}
 
 	// Marshaling the payload into JSON format
@@ -82,9 +102,16 @@ func (psm PowerSwitchMeter) MqttDiscoveryMessageEnergy() MqttMessage {
 		"state_topic":         fmt.Sprintf("climax2mqtt/sensors/%s/state", id),
 		"name":                fmt.Sprintf("%s Energy Usage", psm.Name),
 		"device_class":        "energy",
+		"state_class":         "total_increasing",
 		"unit_of_measurement": "kWh",
 		"value_template":      "{{ value_json.energy }}",
 		"icon":                "mdi:counter",
+		"device": map[string]interface{}{
+			"identifiers":  []string{id},
+			"name":         psm.Name,
+			"manufacturer": "Climax",
+			"model":        "Power Switch Meter",
+		},
 	}
 
 	jsonData, err := json.MarshalIndent(payload, "", "    ")

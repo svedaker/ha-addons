@@ -1,23 +1,24 @@
 
-0.1.12 Update dependencies for security vulnerabilities, added retaing flag on config messages (golang.org/x/net v0.50.0, paho.mqtt.golang v1.5.1)
-0.1.11 Fix none negative values for power 
-0.1.10 Handle set ON, OFF
-fix climax url
-fix config user -> username
-read json options.
-print content
-list files in data
-read /data/options.json
-print env
-fix mqtt_server
-up version
-fix env name
-Move in to directory
-add build.yaml
-add addon files
-sensor -> switch
-add env settings
-Fix update value
-Fix id
-New version
-Initial commit
+- 0.1.13 Added stage_class to mqtt discovery message
+- 0.1.12 Update dependencies for security vulnerabilities, added retaing flag on config messages (golang.org/x/net v0.50.0, paho.mqtt.golang v1.5.1)
+- 0.1.11 Fix none negative values for power 
+- 0.1.10 Handle set ON, OFF
+- fix climax url
+- fix config user -> username
+- read json options.
+- print content
+- list files in data
+- read /data/options.json
+- print env
+- fix mqtt_server
+- up version
+- fix env name
+- Move in to directory
+- add build.yaml
+- add addon files
+- sensor -> switch
+- add env settings
+- Fix update value
+- Fix id
+- New version
+- Initial commit
