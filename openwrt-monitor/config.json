@@ -1,0 +1,58 @@
+{
+  "name": "OpenWrt Monitor",
+  "description": "WiFi client tracking, AP monitoring, WAN monitoring, and device availability via OpenWrt ubus JSON-RPC",
+  "version": "0.1.1",
+  "slug": "openwrt_monitor",
+  "url": "https://github.com/svedaker/ha-addons",
+  "arch": ["amd64", "aarch64", "armv7"],
+  "startup": "application",
+  "boot": "auto",
+  "host_network": true,
+  "options": {
+    "interval": 30,
+    "grace_period": 120,
+    "location": "home",
+    "status_port": 8099,
+    "mqtt_host": "",
+    "mqtt_port": 1883,
+    "mqtt_user": "",
+    "mqtt_password": "",
+    "ubus_user": "monitor",
+    "ubus_password": "",
+    "ubus_scheme": "https",
+    "targets": [
+      {
+        "host": "192.168.1.1",
+        "name": "router",
+        "role": "router"
+      }
+    ],
+    "monitored_devices": []
+  },
+  "schema": {
+    "interval": "int",
+    "grace_period": "int",
+    "location": "str",
+    "status_port": "port",
+    "mqtt_host": "str",
+    "mqtt_port": "port",
+    "mqtt_user": "str",
+    "mqtt_password": "password",
+    "ubus_user": "str",
+    "ubus_password": "password",
+    "ubus_scheme": "list(http|https)",
+    "targets": [
+      {
+        "host": "str",
+        "name": "str",
+        "role": "list(ap|router|both)"
+      }
+    ],
+    "monitored_devices": [
+      {
+        "mac": "str",
+        "name": "str"
+      }
+    ]
+  }
+}
