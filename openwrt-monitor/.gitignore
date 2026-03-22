@@ -1,0 +1,9 @@
+# Build artifacts
+openwrt-monitor
+openwrt-monitor.exe
+
+# Test config (contains passwords)
+test-options.json
+
+# One-off debug scripts (contained plaintext passwords)
+fix_*.sh

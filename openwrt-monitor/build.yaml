@@ -1,0 +1,4 @@
+build_from:
+  amd64: "golang:1.24-alpine"
+  aarch64: "golang:1.24-alpine"
+  armv7: "golang:1.24-alpine"
