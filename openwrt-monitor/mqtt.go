@@ -126,8 +126,9 @@ func (m *MQTTPublisher) PublishAPSensors(aps map[string]*APState) {
 			{"Clients 5GHz", "clients_5g", ap.Clients5G, "clients", "", "measurement", "mdi:wifi"},
 			{"Clients 2.4GHz", "clients_2g", ap.Clients2G, "clients", "", "measurement", "mdi:wifi"},
 			{"Load", "load", fmt.Sprintf("%.2f", ap.Load), "", "", "measurement", "mdi:gauge"},
-			{"Memory Available", "mem_available", ap.MemAvailableKB, "kB", "", "measurement", "mdi:memory"},
-			{"Uptime", "uptime", ap.Uptime, "s", "duration", "total_increasing", "mdi:timer"},
+			{"Memory Available", "mem_available", fmt.Sprintf("%.1f", float64(ap.MemAvailableKB)/1024.0), "MB", "", "measurement", "mdi:memory"},
+			{"Uptime", "uptime", fmt.Sprintf("%.2f", float64(ap.Uptime)/3600.0), "h", "", "measurement", "mdi:timer"},
+			{"Up Since", "up_since", uptimeToRFC3339(ap.Uptime), "", "timestamp", "", "mdi:clock-start"},
 			{"Channel 5GHz", "channel_5g", ap.Channel5G, "", "", "measurement", "mdi:access-point"},
 			{"Channel 2.4GHz", "channel_2g", ap.Channel2G, "", "", "measurement", "mdi:access-point"},
 			{"Noise 5GHz", "noise_5g", ap.Noise5G, "dBm", "signal_strength", "measurement", "mdi:signal-variant"},
@@ -186,7 +187,8 @@ func (m *MQTTPublisher) PublishWANSensors(wan WANState) {
 		icon       string
 	}{
 		{"WAN Status", "status", boolToOnOff(wan.Up), "", "", "", "mdi:wan"},
-		{"WAN Uptime", "uptime", wan.Uptime, "s", "duration", "total_increasing", "mdi:timer-outline"},
+		{"WAN Uptime", "uptime", fmt.Sprintf("%.2f", float64(wan.Uptime)/3600.0), "h", "", "measurement", "mdi:timer-outline"},
+		{"WAN Up Since", "up_since", uptimeToRFC3339(wan.Uptime), "", "timestamp", "", "mdi:clock-start"},
 		{"WAN Public IP", "public_ip", wan.PublicIP, "", "", "", "mdi:ip-network"},
 		{"WAN RX Total", "rx_bytes", fmt.Sprintf("%.2f", float64(wan.RxBytes)/1e9), "GB", "data_size", "total_increasing", "mdi:download-network"},
 		{"WAN TX Total", "tx_bytes", fmt.Sprintf("%.2f", float64(wan.TxBytes)/1e9), "GB", "data_size", "total_increasing", "mdi:upload-network"},
@@ -254,9 +256,10 @@ func (m *MQTTPublisher) PublishRouterSensors(router RouterState) {
 		icon       string
 	}{
 		{"Router Status", "status", strings.ToUpper(router.Status), "", "", "", "mdi:router-network"},
-		{"Router Uptime", "uptime", router.Uptime, "s", "duration", "total_increasing", "mdi:timer-outline"},
+		{"Router Uptime", "uptime", fmt.Sprintf("%.2f", float64(router.Uptime)/3600.0), "h", "", "measurement", "mdi:timer-outline"},
+		{"Router Up Since", "up_since", uptimeToRFC3339(router.Uptime), "", "timestamp", "", "mdi:clock-start"},
 		{"Router Load", "load", fmt.Sprintf("%.2f", router.Load), "", "", "measurement", "mdi:gauge"},
-		{"Router Memory Available", "mem_available", router.MemAvailableKB, "kB", "", "measurement", "mdi:memory"},
+		{"Router Memory Available", "mem_available", fmt.Sprintf("%.1f", float64(router.MemAvailableKB)/1024.0), "MB", "", "measurement", "mdi:memory"},
 	}
 
 	for _, s := range sensors {
@@ -391,4 +394,12 @@ func targetNodeID(name string) string {
 	id = strings.ReplaceAll(id, "-", "_")
 	id = strings.ReplaceAll(id, " ", "_")
 	return id
+}
+
+// uptimeToRFC3339 converts uptime in seconds to an RFC3339 timestamp.
+func uptimeToRFC3339(uptimeSec int) string {
+	if uptimeSec <= 0 {
+		return ""
+	}
+	return time.Now().Add(-time.Duration(uptimeSec) * time.Second).UTC().Format(time.RFC3339)
 }
