@@ -112,7 +112,7 @@ func (m *MQTTPublisher) PublishDeviceTrackers(clients map[string]*Client) {
 // PublishAPSensors publishes HA autodiscovery + state for AP sensors.
 func (m *MQTTPublisher) PublishAPSensors(aps map[string]*APState) {
 	for _, ap := range aps {
-		nodeID := strings.ReplaceAll(ap.Name, "-", "_")
+		nodeID := targetNodeID(ap.Name)
 
 		sensors := []struct {
 			name       string
@@ -146,7 +146,7 @@ func (m *MQTTPublisher) PublishAPSensors(aps map[string]*APState) {
 				"unique_id":    uniqueID,
 				"state_topic":  stateTopic,
 				"device": map[string]interface{}{
-					"identifiers":  []string{fmt.Sprintf("openwrt_monitor_ap_%s", nodeID)},
+					"identifiers":  []string{fmt.Sprintf("openwrt_monitor_%s", nodeID)},
 					"name":         ap.Name,
 					"manufacturer": "OpenWrt",
 					"model":        "Access Point",
@@ -242,7 +242,7 @@ func (m *MQTTPublisher) PublishRouterSensors(router RouterState) {
 		return
 	}
 
-	nodeID := "router_" + strings.ReplaceAll(strings.ToLower(router.Name), "-", "_")
+	nodeID := targetNodeID(router.Name)
 
 	sensors := []struct {
 		name       string
@@ -269,7 +269,7 @@ func (m *MQTTPublisher) PublishRouterSensors(router RouterState) {
 			"unique_id":   uniqueID,
 			"state_topic": stateTopic,
 			"device": map[string]interface{}{
-				"identifiers":  []string{fmt.Sprintf("openwrt_monitor_router_%s", nodeID)},
+				"identifiers":  []string{fmt.Sprintf("openwrt_monitor_%s", nodeID)},
 				"name":         router.Name,
 				"manufacturer": "OpenWrt",
 				"model":        "Router",
@@ -383,4 +383,12 @@ func (m *MQTTPublisher) publishJSON(topic string, payload interface{}, retained 
 // macToNodeID converts "6c:2f:80:d6:2f:f4" to "6c2f80d62ff4".
 func macToNodeID(mac string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(mac, ":", ""), "-", "")
+}
+
+// targetNodeID normalizes target names from config for MQTT/HA IDs.
+func targetNodeID(name string) string {
+	id := strings.ToLower(strings.TrimSpace(name))
+	id = strings.ReplaceAll(id, "-", "_")
+	id = strings.ReplaceAll(id, " ", "_")
+	return id
 }
