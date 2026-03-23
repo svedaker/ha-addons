@@ -63,6 +63,7 @@ func (c *Collector) Poll() {
 	if router := c.cfg.Router(); router != nil {
 		c.fetchDHCPLeases(router)
 		c.fetchHostHints(router)
+		c.fetchRouterSystem(router, now)
 		c.fetchWANStatus(router, now)
 	}
 
@@ -96,6 +97,37 @@ func (c *Collector) Poll() {
 	c.state.MarkAbsent(seenMACs, gracePeriod, now)
 
 	c.state.SetLastPoll(now)
+}
+
+// fetchRouterSystem gets router system metrics (uptime, load, memory).
+func (c *Collector) fetchRouterSystem(router *Target, now time.Time) {
+	uc := c.clients[router.Host]
+	data, err := uc.Call("system", "info", nil)
+	if err != nil {
+		log.Printf("[%s] router system info error: %v", router.Name, err)
+		c.state.MarkRouterOffline(router.Name, router.Host)
+		return
+	}
+
+	var sysInfo struct {
+		Uptime int      `json:"uptime"`
+		Load   [3]int64 `json:"load"`
+		Memory struct {
+			Available int `json:"available"`
+		} `json:"memory"`
+	}
+	if err := json.Unmarshal(data, &sysInfo); err != nil {
+		log.Printf("[%s] parse router system info: %v", router.Name, err)
+		return
+	}
+
+	load := 0.0
+	if len(sysInfo.Load) > 0 {
+		load = float64(sysInfo.Load[0]) / 65536.0
+	}
+	memAvailableKB := sysInfo.Memory.Available / 1024
+
+	c.state.UpdateRouterSystem(router.Name, router.Host, sysInfo.Uptime, load, memAvailableKB, now)
 }
 
 // fetchDHCPLeases gets DHCP leases from the router via luci-rpc.

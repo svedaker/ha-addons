@@ -67,11 +67,23 @@ type WANState struct {
 	prevPollTime time.Time
 }
 
+// RouterState holds router system metrics.
+type RouterState struct {
+	Name           string    `json:"name"`
+	Host           string    `json:"host"`
+	Status         string    `json:"status"` // "online" or "offline"
+	Uptime         int       `json:"uptime"`
+	Load           float64   `json:"load"`
+	MemAvailableKB int       `json:"memory_available_kb"`
+	LastPoll       time.Time `json:"last_poll"`
+}
+
 // State holds all tracked clients and AP states.
 type State struct {
 	mu               sync.RWMutex
 	clients          map[string]*Client           // keyed by MAC
 	aps              map[string]*APState          // keyed by AP name
+	router           *RouterState
 	wan              *WANState
 	monitoredDevices map[string]*MonitoredDevice  // keyed by MAC (lowercase)
 	lastPoll         time.Time
@@ -110,12 +122,46 @@ func NewState() *State {
 	return &State{
 		clients:          make(map[string]*Client),
 		aps:              make(map[string]*APState),
+		router:           &RouterState{Status: "offline"},
 		wan:              &WANState{},
 		monitoredDevices: make(map[string]*MonitoredDevice),
 		dhcpLeases:       make(map[string]DHCPLease),
 		hostHints:        make(map[string]HostHint),
 		startTime:        time.Now(),
 	}
+}
+
+// UpdateRouterSystem updates router system metrics.
+func (s *State) UpdateRouterSystem(name string, host string, uptime int, load float64, memAvailableKB int, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r := s.router
+	r.Name = name
+	r.Host = host
+	r.Status = "online"
+	r.Uptime = uptime
+	r.Load = load
+	r.MemAvailableKB = memAvailableKB
+	r.LastPoll = now
+}
+
+// MarkRouterOffline marks the router as offline.
+func (s *State) MarkRouterOffline(name string, host string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r := s.router
+	r.Name = name
+	r.Host = host
+	r.Status = "offline"
+}
+
+// GetRouter returns a copy of the router state.
+func (s *State) GetRouter() RouterState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return *s.router
 }
 
 // UpdateDHCPLeases replaces the DHCP lease table.
@@ -417,6 +463,7 @@ func (s *State) Snapshot() StateSnapshot {
 	}
 
 	wanCopy := *s.wan
+	routerCopy := *s.router
 
 	monDevs := make(map[string]*MonitoredDevice, len(s.monitoredDevices))
 	for k, v := range s.monitoredDevices {
@@ -428,6 +475,7 @@ func (s *State) Snapshot() StateSnapshot {
 		Uptime:           time.Since(s.startTime).Round(time.Second).String(),
 		LastPoll:         s.lastPoll,
 		APs:              aps,
+		Router:           &routerCopy,
 		Clients:          clients,
 		DHCPLeases:       len(s.dhcpLeases),
 		TotalWiFiClients: totalWiFi,
@@ -465,6 +513,7 @@ type StateSnapshot struct {
 	Uptime           string                       `json:"uptime"`
 	LastPoll         time.Time                    `json:"last_poll"`
 	APs              map[string]*APState          `json:"aps"`
+	Router           *RouterState                 `json:"router"`
 	Clients          map[string]*Client           `json:"clients"`
 	DHCPLeases       int                          `json:"dhcp_leases"`
 	TotalWiFiClients int                          `json:"total_wifi_clients"`

@@ -236,6 +236,64 @@ func boolToOnOff(b bool) string {
 	return "OFF"
 }
 
+// PublishRouterSensors publishes HA autodiscovery + state for router system sensors.
+func (m *MQTTPublisher) PublishRouterSensors(router RouterState) {
+	if router.Name == "" {
+		return
+	}
+
+	nodeID := "router_" + strings.ReplaceAll(strings.ToLower(router.Name), "-", "_")
+
+	sensors := []struct {
+		name       string
+		suffix     string
+		value      interface{}
+		unit       string
+		devClass   string
+		stateClass string
+		icon       string
+	}{
+		{"Router Status", "status", strings.ToUpper(router.Status), "", "", "", "mdi:router-network"},
+		{"Router Uptime", "uptime", router.Uptime, "s", "duration", "total_increasing", "mdi:timer-outline"},
+		{"Router Load", "load", fmt.Sprintf("%.2f", router.Load), "", "", "measurement", "mdi:gauge"},
+		{"Router Memory Available", "mem_available", router.MemAvailableKB, "kB", "", "measurement", "mdi:memory"},
+	}
+
+	for _, s := range sensors {
+		uniqueID := fmt.Sprintf("openwrt_monitor_%s_%s", nodeID, s.suffix)
+		configTopic := fmt.Sprintf("homeassistant/sensor/openwrt_monitor/%s_%s/config", nodeID, s.suffix)
+		stateTopic := fmt.Sprintf("openwrt-monitor/sensor/%s/%s", nodeID, s.suffix)
+
+		config := map[string]interface{}{
+			"name":        s.name,
+			"unique_id":   uniqueID,
+			"state_topic": stateTopic,
+			"device": map[string]interface{}{
+				"identifiers":  []string{fmt.Sprintf("openwrt_monitor_router_%s", nodeID)},
+				"name":         router.Name,
+				"manufacturer": "OpenWrt",
+				"model":        "Router",
+				"via_device":   "openwrt_monitor",
+			},
+		}
+		if s.unit != "" {
+			config["unit_of_measurement"] = s.unit
+		}
+		if s.devClass != "" {
+			config["device_class"] = s.devClass
+		}
+		if s.stateClass != "" {
+			config["state_class"] = s.stateClass
+		}
+		if s.icon != "" {
+			config["icon"] = s.icon
+		}
+
+		m.publishJSON(configTopic, config, true)
+		m.publish(stateTopic, fmt.Sprintf("%v", s.value), false)
+	}
+}
+
 // PublishMonitoredDevices publishes HA autodiscovery + state for monitored devices as binary_sensors.
 func (m *MQTTPublisher) PublishMonitoredDevices(devices map[string]*MonitoredDevice) {
 	for _, dev := range devices {

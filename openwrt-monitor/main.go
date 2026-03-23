@@ -84,6 +84,7 @@ func runPollCycle(collector *Collector, mqttPub *MQTTPublisher, state *State) {
 	// Publish to MQTT
 	mqttPub.PublishDeviceTrackers(state.AllClients())
 	mqttPub.PublishAPSensors(state.AllAPs())
+	mqttPub.PublishRouterSensors(state.GetRouter())
 	mqttPub.PublishWANSensors(state.GetWAN())
 	mqttPub.PublishMonitoredDevices(state.AllMonitoredDevices())
 
