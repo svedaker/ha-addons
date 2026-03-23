@@ -1,0 +1,2 @@
+- 0.1.1 Fix Docker multi-stage build so Go is always available in the builder stage
+- 0.1.0 Initial release
