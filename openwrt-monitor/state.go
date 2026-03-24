@@ -36,6 +36,14 @@ type APState struct {
 	MemAvailableKB    int       `json:"memory_available_kb"`
 	Clients5G         int       `json:"clients_5g"`
 	Clients2G         int       `json:"clients_2g"`
+	RxBytes5G         int64     `json:"rx_bytes_5g"`
+	TxBytes5G         int64     `json:"tx_bytes_5g"`
+	RxBytes2G         int64     `json:"rx_bytes_2g"`
+	TxBytes2G         int64     `json:"tx_bytes_2g"`
+	RxRate5G          float64   `json:"rx_rate_mbps_5g"`
+	TxRate5G          float64   `json:"tx_rate_mbps_5g"`
+	RxRate2G          float64   `json:"rx_rate_mbps_2g"`
+	TxRate2G          float64   `json:"tx_rate_mbps_2g"`
 	Channel5G         int       `json:"channel_5g"`
 	Channel2G         int       `json:"channel_2g"`
 	Noise5G           int       `json:"noise_5g"`
@@ -48,6 +56,11 @@ type APState struct {
 	prevActive5G int64
 	prevBusy2G   int64
 	prevActive2G int64
+	prevRxBytes5G int64
+	prevTxBytes5G int64
+	prevRxBytes2G int64
+	prevTxBytes2G int64
+	prevPollTime  time.Time
 }
 
 // WANState holds WAN interface status and traffic counters.
@@ -295,11 +308,33 @@ func (s *State) UpdateAPState(name string, info APInfo, now time.Time) {
 	ap.MemAvailableKB = info.MemAvailableKB
 	ap.Clients5G = info.Clients5G
 	ap.Clients2G = info.Clients2G
+	ap.RxBytes5G = info.RxBytes5G
+	ap.TxBytes5G = info.TxBytes5G
+	ap.RxBytes2G = info.RxBytes2G
+	ap.TxBytes2G = info.TxBytes2G
 	ap.Channel5G = info.Channel5G
 	ap.Channel2G = info.Channel2G
 	ap.Noise5G = info.Noise5G
 	ap.Noise2G = info.Noise2G
 	ap.LastPoll = now
+
+	if !ap.prevPollTime.IsZero() {
+		elapsed := now.Sub(ap.prevPollTime).Seconds()
+		if elapsed > 0 {
+			if info.RxBytes5G >= ap.prevRxBytes5G {
+				ap.RxRate5G = float64(info.RxBytes5G-ap.prevRxBytes5G) * 8 / elapsed / 1e6
+			}
+			if info.TxBytes5G >= ap.prevTxBytes5G {
+				ap.TxRate5G = float64(info.TxBytes5G-ap.prevTxBytes5G) * 8 / elapsed / 1e6
+			}
+			if info.RxBytes2G >= ap.prevRxBytes2G {
+				ap.RxRate2G = float64(info.RxBytes2G-ap.prevRxBytes2G) * 8 / elapsed / 1e6
+			}
+			if info.TxBytes2G >= ap.prevTxBytes2G {
+				ap.TxRate2G = float64(info.TxBytes2G-ap.prevTxBytes2G) * 8 / elapsed / 1e6
+			}
+		}
+	}
 
 	// Calculate airtime delta
 	if ap.prevActive5G > 0 && info.AirtimeActive5G > ap.prevActive5G {
@@ -321,6 +356,11 @@ func (s *State) UpdateAPState(name string, info APInfo, now time.Time) {
 	ap.prevBusy5G = info.AirtimeBusy5G
 	ap.prevActive2G = info.AirtimeActive2G
 	ap.prevBusy2G = info.AirtimeBusy2G
+	ap.prevRxBytes5G = info.RxBytes5G
+	ap.prevTxBytes5G = info.TxBytes5G
+	ap.prevRxBytes2G = info.RxBytes2G
+	ap.prevTxBytes2G = info.TxBytes2G
+	ap.prevPollTime = now
 }
 
 // MarkAPOffline marks an AP as offline.

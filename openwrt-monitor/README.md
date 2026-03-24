@@ -297,6 +297,14 @@ monitored_devices:
 |--------|------|-------------|
 | Clients 5GHz | clients | Connected 5GHz clients |
 | Clients 2.4GHz | clients | Connected 2.4GHz clients |
+| WiFi 5GHz RX Total | GB | Total received traffic on 5GHz interface |
+| WiFi 5GHz TX Total | GB | Total transmitted traffic on 5GHz interface |
+| WiFi 2.4GHz RX Total | GB | Total received traffic on 2.4GHz interface |
+| WiFi 2.4GHz TX Total | GB | Total transmitted traffic on 2.4GHz interface |
+| WiFi 5GHz Download | Mbit/s | Current 5GHz download rate |
+| WiFi 5GHz Upload | Mbit/s | Current 5GHz upload rate |
+| WiFi 2.4GHz Download | Mbit/s | Current 2.4GHz download rate |
+| WiFi 2.4GHz Upload | Mbit/s | Current 2.4GHz upload rate |
 | Airtime 5GHz | % | Channel utilization 5GHz |
 | Airtime 2.4GHz | % | Channel utilization 2.4GHz |
 | Channel 5GHz | — | Active channel number |

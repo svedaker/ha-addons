@@ -62,13 +62,13 @@ func (m *MQTTPublisher) PublishDeviceTrackers(clients map[string]*Client) {
 		}
 
 		configPayload := map[string]interface{}{
-			"name":                displayName,
-			"unique_id":          fmt.Sprintf("openwrt_monitor_%s", nodeID),
-			"state_topic":        fmt.Sprintf("openwrt-monitor/device_tracker/%s/state", nodeID),
+			"name":                  displayName,
+			"unique_id":             fmt.Sprintf("openwrt_monitor_%s", nodeID),
+			"state_topic":           fmt.Sprintf("openwrt-monitor/device_tracker/%s/state", nodeID),
 			"json_attributes_topic": fmt.Sprintf("openwrt-monitor/device_tracker/%s/attributes", nodeID),
-			"source_type":        "router",
-			"payload_home":       "home",
-			"payload_not_home":   "not_home",
+			"source_type":           "router",
+			"payload_home":          "home",
+			"payload_not_home":      "not_home",
 			"device": map[string]interface{}{
 				"identifiers":  []string{fmt.Sprintf("openwrt_monitor_%s", nodeID)},
 				"name":         displayName,
@@ -125,6 +125,14 @@ func (m *MQTTPublisher) PublishAPSensors(aps map[string]*APState) {
 		}{
 			{"Clients 5GHz", "clients_5g", ap.Clients5G, "clients", "", "measurement", "mdi:wifi"},
 			{"Clients 2.4GHz", "clients_2g", ap.Clients2G, "clients", "", "measurement", "mdi:wifi"},
+			{"WiFi 5GHz RX Total", "rx_bytes_5g", fmt.Sprintf("%.2f", float64(ap.RxBytes5G)/1e9), "GB", "data_size", "total_increasing", "mdi:download-network"},
+			{"WiFi 5GHz TX Total", "tx_bytes_5g", fmt.Sprintf("%.2f", float64(ap.TxBytes5G)/1e9), "GB", "data_size", "total_increasing", "mdi:upload-network"},
+			{"WiFi 2.4GHz RX Total", "rx_bytes_2g", fmt.Sprintf("%.2f", float64(ap.RxBytes2G)/1e9), "GB", "data_size", "total_increasing", "mdi:download-network"},
+			{"WiFi 2.4GHz TX Total", "tx_bytes_2g", fmt.Sprintf("%.2f", float64(ap.TxBytes2G)/1e9), "GB", "data_size", "total_increasing", "mdi:upload-network"},
+			{"WiFi 5GHz Download", "rx_rate_5g", fmt.Sprintf("%.2f", ap.RxRate5G), "Mbit/s", "data_rate", "measurement", "mdi:download"},
+			{"WiFi 5GHz Upload", "tx_rate_5g", fmt.Sprintf("%.2f", ap.TxRate5G), "Mbit/s", "data_rate", "measurement", "mdi:upload"},
+			{"WiFi 2.4GHz Download", "rx_rate_2g", fmt.Sprintf("%.2f", ap.RxRate2G), "Mbit/s", "data_rate", "measurement", "mdi:download"},
+			{"WiFi 2.4GHz Upload", "tx_rate_2g", fmt.Sprintf("%.2f", ap.TxRate2G), "Mbit/s", "data_rate", "measurement", "mdi:upload"},
 			{"Load", "load", fmt.Sprintf("%.2f", ap.Load), "", "", "measurement", "mdi:gauge"},
 			{"Memory Available", "mem_available", fmt.Sprintf("%.1f", float64(ap.MemAvailableKB)/1024.0), "MB", "", "measurement", "mdi:memory"},
 			{"Uptime", "uptime", fmt.Sprintf("%.2f", float64(ap.Uptime)/3600.0), "h", "", "measurement", "mdi:timer"},
@@ -143,9 +151,9 @@ func (m *MQTTPublisher) PublishAPSensors(aps map[string]*APState) {
 			stateTopic := fmt.Sprintf("openwrt-monitor/sensor/%s/%s", nodeID, s.suffix)
 
 			config := map[string]interface{}{
-				"name":         s.name,
-				"unique_id":    uniqueID,
-				"state_topic":  stateTopic,
+				"name":        s.name,
+				"unique_id":   uniqueID,
+				"state_topic": stateTopic,
 				"device": map[string]interface{}{
 					"identifiers":  []string{fmt.Sprintf("openwrt_monitor_%s", nodeID)},
 					"name":         ap.Name,
@@ -308,14 +316,14 @@ func (m *MQTTPublisher) PublishMonitoredDevices(devices map[string]*MonitoredDev
 		attrTopic := fmt.Sprintf("openwrt-monitor/monitored/%s/attributes", nodeID)
 
 		config := map[string]interface{}{
-			"name":                    dev.Name,
-			"unique_id":               fmt.Sprintf("openwrt_monitor_dev_%s", nodeID),
-			"state_topic":             stateTopic,
-			"json_attributes_topic":   attrTopic,
-			"payload_on":              "ON",
-			"payload_off":             "OFF",
-			"device_class":            "connectivity",
-			"icon":                    "mdi:lan-connect",
+			"name":                  dev.Name,
+			"unique_id":             fmt.Sprintf("openwrt_monitor_dev_%s", nodeID),
+			"state_topic":           stateTopic,
+			"json_attributes_topic": attrTopic,
+			"payload_on":            "ON",
+			"payload_off":           "OFF",
+			"device_class":          "connectivity",
+			"icon":                  "mdi:lan-connect",
 			"device": map[string]interface{}{
 				"identifiers":  []string{fmt.Sprintf("openwrt_monitor_dev_%s", nodeID)},
 				"name":         dev.Name,

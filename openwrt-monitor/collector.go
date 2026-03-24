@@ -28,6 +28,10 @@ type APInfo struct {
 	MemAvailableKB  int
 	Clients5G       int
 	Clients2G       int
+	RxBytes5G       int64
+	TxBytes5G       int64
+	RxBytes2G       int64
+	TxBytes2G       int64
 	Channel5G       int
 	Channel2G       int
 	Noise5G         int
@@ -267,6 +271,26 @@ func (c *Collector) fetchAPData(ap Target) ([]ScannedClient, APInfo, error) {
 			info.Clients5G = len(clients)
 		} else {
 			info.Clients2G = len(clients)
+		}
+
+		// network.device.status — per-band RX/TX counters on AP interfaces
+		devData, err := uc.Call("network.device", "status", map[string]interface{}{"name": dev})
+		if err == nil {
+			var devStatus struct {
+				Statistics struct {
+					RxBytes int64 `json:"rx_bytes"`
+					TxBytes int64 `json:"tx_bytes"`
+				} `json:"statistics"`
+			}
+			if json.Unmarshal(devData, &devStatus) == nil {
+				if band == "5GHz" {
+					info.RxBytes5G = devStatus.Statistics.RxBytes
+					info.TxBytes5G = devStatus.Statistics.TxBytes
+				} else {
+					info.RxBytes2G = devStatus.Statistics.RxBytes
+					info.TxBytes2G = devStatus.Statistics.TxBytes
+				}
+			}
 		}
 
 		// iwinfo.info — channel, noise
