@@ -401,5 +401,6 @@ func uptimeToRFC3339(uptimeSec int) string {
 	if uptimeSec <= 0 {
 		return ""
 	}
-	return time.Now().Add(-time.Duration(uptimeSec) * time.Second).UTC().Format(time.RFC3339)
+	// Round to whole minutes to avoid HA history jitter from poll timing.
+	return time.Now().Add(-time.Duration(uptimeSec) * time.Second).UTC().Truncate(time.Minute).Format(time.RFC3339)
 }
