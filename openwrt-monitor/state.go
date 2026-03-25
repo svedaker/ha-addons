@@ -28,34 +28,35 @@ type Client struct {
 
 // APState represents the current state of an access point.
 type APState struct {
-	Host              string    `json:"host"`
-	Name              string    `json:"name"`
-	Status            string    `json:"status"` // "online" or "offline"
-	Uptime            int       `json:"uptime"`
-	Load              float64   `json:"load"`
-	MemAvailableKB    int       `json:"memory_available_kb"`
-	Clients5G         int       `json:"clients_5g"`
-	Clients2G         int       `json:"clients_2g"`
-	RxBytes5G         int64     `json:"rx_bytes_5g"`
-	TxBytes5G         int64     `json:"tx_bytes_5g"`
-	RxBytes2G         int64     `json:"rx_bytes_2g"`
-	TxBytes2G         int64     `json:"tx_bytes_2g"`
-	RxRate5G          float64   `json:"rx_rate_mbps_5g"`
-	TxRate5G          float64   `json:"tx_rate_mbps_5g"`
-	RxRate2G          float64   `json:"rx_rate_mbps_2g"`
-	TxRate2G          float64   `json:"tx_rate_mbps_2g"`
-	Channel5G         int       `json:"channel_5g"`
-	Channel2G         int       `json:"channel_2g"`
-	Noise5G           int       `json:"noise_5g"`
-	Noise2G           int       `json:"noise_2g"`
-	Airtime5G         float64   `json:"airtime_5g_pct"`
-	Airtime2G         float64   `json:"airtime_2g_pct"`
-	LastPoll          time.Time `json:"last_poll"`
+	Host           string                `json:"host"`
+	Name           string                `json:"name"`
+	Status         string                `json:"status"` // "online" or "offline"
+	Uptime         int                   `json:"uptime"`
+	Load           float64               `json:"load"`
+	MemAvailableKB int                   `json:"memory_available_kb"`
+	Clients5G      int                   `json:"clients_5g"`
+	Clients2G      int                   `json:"clients_2g"`
+	RxBytes5G      int64                 `json:"rx_bytes_5g"`
+	TxBytes5G      int64                 `json:"tx_bytes_5g"`
+	RxBytes2G      int64                 `json:"rx_bytes_2g"`
+	TxBytes2G      int64                 `json:"tx_bytes_2g"`
+	RxRate5G       float64               `json:"rx_rate_mbps_5g"`
+	TxRate5G       float64               `json:"tx_rate_mbps_5g"`
+	RxRate2G       float64               `json:"rx_rate_mbps_2g"`
+	TxRate2G       float64               `json:"tx_rate_mbps_2g"`
+	Channel5G      int                   `json:"channel_5g"`
+	Channel2G      int                   `json:"channel_2g"`
+	Noise5G        int                   `json:"noise_5g"`
+	Noise2G        int                   `json:"noise_2g"`
+	Airtime5G      float64               `json:"airtime_5g_pct"`
+	Airtime2G      float64               `json:"airtime_2g_pct"`
+	SSIDs          map[string]*SSIDState `json:"ssids,omitempty"`
+	LastPoll       time.Time             `json:"last_poll"`
 	// Previous survey counters for delta calculation
-	prevBusy5G   int64
-	prevActive5G int64
-	prevBusy2G   int64
-	prevActive2G int64
+	prevBusy5G    int64
+	prevActive5G  int64
+	prevBusy2G    int64
+	prevActive2G  int64
 	prevRxBytes5G int64
 	prevTxBytes5G int64
 	prevRxBytes2G int64
@@ -63,17 +64,34 @@ type APState struct {
 	prevPollTime  time.Time
 }
 
-// WANState holds WAN interface status and traffic counters.
-type WANState struct {
-	Up           bool      `json:"up"`
-	Uptime       int       `json:"uptime"`
-	Device       string    `json:"device"`
-	PublicIP     string    `json:"public_ip"`
+// SSIDState represents per-SSID metrics for one AP.
+type SSIDState struct {
+	SSID         string    `json:"ssid"`
+	Band         string    `json:"band"`
+	Clients      int       `json:"clients"`
 	RxBytes      int64     `json:"rx_bytes"`
 	TxBytes      int64     `json:"tx_bytes"`
 	RxRateMbps   float64   `json:"rx_rate_mbps"`
 	TxRateMbps   float64   `json:"tx_rate_mbps"`
+	Channel      int       `json:"channel"`
+	Noise        int       `json:"noise"`
 	LastPoll     time.Time `json:"last_poll"`
+	prevRxBytes  int64
+	prevTxBytes  int64
+	prevPollTime time.Time
+}
+
+// WANState holds WAN interface status and traffic counters.
+type WANState struct {
+	Up         bool      `json:"up"`
+	Uptime     int       `json:"uptime"`
+	Device     string    `json:"device"`
+	PublicIP   string    `json:"public_ip"`
+	RxBytes    int64     `json:"rx_bytes"`
+	TxBytes    int64     `json:"tx_bytes"`
+	RxRateMbps float64   `json:"rx_rate_mbps"`
+	TxRateMbps float64   `json:"tx_rate_mbps"`
+	LastPoll   time.Time `json:"last_poll"`
 	// previous counters for rate calculation
 	prevRxBytes  int64
 	prevTxBytes  int64
@@ -94,11 +112,11 @@ type RouterState struct {
 // State holds all tracked clients and AP states.
 type State struct {
 	mu               sync.RWMutex
-	clients          map[string]*Client           // keyed by MAC
-	aps              map[string]*APState          // keyed by AP name
+	clients          map[string]*Client  // keyed by MAC
+	aps              map[string]*APState // keyed by AP name
 	router           *RouterState
 	wan              *WANState
-	monitoredDevices map[string]*MonitoredDevice  // keyed by MAC (lowercase)
+	monitoredDevices map[string]*MonitoredDevice // keyed by MAC (lowercase)
 	lastPoll         time.Time
 	startTime        time.Time
 	dhcpLeases       map[string]DHCPLease // keyed by MAC (lowercase)
@@ -121,12 +139,12 @@ type HostHint struct {
 
 // MonitoredDevice tracks online/offline state for a configured device.
 type MonitoredDevice struct {
-	MAC         string    `json:"mac"`
-	Name        string    `json:"name"`
-	Online      bool      `json:"online"`
-	IP          string    `json:"ip"`
-	OnlineSince time.Time `json:"online_since"`
-	LastSeen    time.Time `json:"last_seen"`
+	MAC          string    `json:"mac"`
+	Name         string    `json:"name"`
+	Online       bool      `json:"online"`
+	IP           string    `json:"ip"`
+	OnlineSince  time.Time `json:"online_since"`
+	LastSeen     time.Time `json:"last_seen"`
 	OfflineSince time.Time `json:"offline_since,omitempty"`
 }
 
@@ -301,6 +319,9 @@ func (s *State) UpdateAPState(name string, info APInfo, now time.Time) {
 		ap = &APState{Name: name}
 		s.aps[name] = ap
 	}
+	if ap.SSIDs == nil {
+		ap.SSIDs = map[string]*SSIDState{}
+	}
 
 	ap.Status = "online"
 	ap.Uptime = info.Uptime
@@ -361,6 +382,47 @@ func (s *State) UpdateAPState(name string, info APInfo, now time.Time) {
 	ap.prevRxBytes2G = info.RxBytes2G
 	ap.prevTxBytes2G = info.TxBytes2G
 	ap.prevPollTime = now
+
+	seenSSIDKeys := make(map[string]bool, len(info.SSIDs))
+	for key, ssidInfo := range info.SSIDs {
+		seenSSIDKeys[key] = true
+		ssidState, exists := ap.SSIDs[key]
+		if !exists {
+			ssidState = &SSIDState{SSID: ssidInfo.SSID, Band: ssidInfo.Band}
+			ap.SSIDs[key] = ssidState
+		}
+
+		ssidState.SSID = ssidInfo.SSID
+		ssidState.Band = ssidInfo.Band
+		ssidState.Clients = ssidInfo.Clients
+		ssidState.RxBytes = ssidInfo.RxBytes
+		ssidState.TxBytes = ssidInfo.TxBytes
+		ssidState.Channel = ssidInfo.Channel
+		ssidState.Noise = ssidInfo.Noise
+		ssidState.LastPoll = now
+
+		if !ssidState.prevPollTime.IsZero() {
+			elapsed := now.Sub(ssidState.prevPollTime).Seconds()
+			if elapsed > 0 {
+				if ssidInfo.RxBytes >= ssidState.prevRxBytes {
+					ssidState.RxRateMbps = float64(ssidInfo.RxBytes-ssidState.prevRxBytes) * 8 / elapsed / 1e6
+				}
+				if ssidInfo.TxBytes >= ssidState.prevTxBytes {
+					ssidState.TxRateMbps = float64(ssidInfo.TxBytes-ssidState.prevTxBytes) * 8 / elapsed / 1e6
+				}
+			}
+		}
+
+		ssidState.prevRxBytes = ssidInfo.RxBytes
+		ssidState.prevTxBytes = ssidInfo.TxBytes
+		ssidState.prevPollTime = now
+	}
+
+	for key := range ap.SSIDs {
+		if !seenSSIDKeys[key] {
+			delete(ap.SSIDs, key)
+		}
+	}
 }
 
 // MarkAPOffline marks an AP as offline.
@@ -550,15 +612,15 @@ func (s *State) AllAPs() map[string]*APState {
 
 // StateSnapshot is the JSON-serializable status output.
 type StateSnapshot struct {
-	Uptime           string                       `json:"uptime"`
-	LastPoll         time.Time                    `json:"last_poll"`
-	APs              map[string]*APState          `json:"aps"`
-	Router           *RouterState                 `json:"router"`
-	Clients          map[string]*Client           `json:"clients"`
-	DHCPLeases       int                          `json:"dhcp_leases"`
-	TotalWiFiClients int                          `json:"total_wifi_clients"`
-	WAN              *WANState                    `json:"wan"`
-	MonitoredDevices map[string]*MonitoredDevice  `json:"monitored_devices"`
+	Uptime           string                      `json:"uptime"`
+	LastPoll         time.Time                   `json:"last_poll"`
+	APs              map[string]*APState         `json:"aps"`
+	Router           *RouterState                `json:"router"`
+	Clients          map[string]*Client          `json:"clients"`
+	DHCPLeases       int                         `json:"dhcp_leases"`
+	TotalWiFiClients int                         `json:"total_wifi_clients"`
+	WAN              *WANState                   `json:"wan"`
+	MonitoredDevices map[string]*MonitoredDevice `json:"monitored_devices"`
 }
 
 // stripDomain removes any domain suffix from a hostname (e.g. "freenas.lan" → "freenas").

@@ -12,8 +12,9 @@ import (
 
 // MQTTPublisher handles MQTT connection and HA autodiscovery.
 type MQTTPublisher struct {
-	client   mqtt.Client
-	location string
+	client          mqtt.Client
+	location        string
+	heartbeatExpire int
 }
 
 // NewMQTTPublisher connects to the MQTT broker.
@@ -27,8 +28,11 @@ func NewMQTTPublisher(cfg *Config) (*MQTTPublisher, error) {
 	opts.SetConnectRetry(true)
 	opts.SetConnectRetryInterval(10 * time.Second)
 	opts.SetKeepAlive(30 * time.Second)
+	opts.SetWill("openwrt-monitor/status", "offline", 1, true)
 	opts.SetOnConnectHandler(func(c mqtt.Client) {
 		log.Println("[mqtt] connected to broker")
+		token := c.Publish("openwrt-monitor/status", 1, true, "online")
+		token.Wait()
 	})
 	opts.SetConnectionLostHandler(func(c mqtt.Client, err error) {
 		log.Printf("[mqtt] connection lost: %v", err)
@@ -41,9 +45,15 @@ func NewMQTTPublisher(cfg *Config) (*MQTTPublisher, error) {
 		return nil, fmt.Errorf("mqtt connect: %w", err)
 	}
 
+	heartbeatExpire := cfg.Interval * 3
+	if heartbeatExpire < 90 {
+		heartbeatExpire = 90
+	}
+
 	return &MQTTPublisher{
-		client:   client,
-		location: cfg.Location,
+		client:          client,
+		location:        cfg.Location,
+		heartbeatExpire: heartbeatExpire,
 	}, nil
 }
 
@@ -178,7 +188,114 @@ func (m *MQTTPublisher) PublishAPSensors(aps map[string]*APState) {
 			m.publishJSON(configTopic, config, true)
 			m.publish(stateTopic, fmt.Sprintf("%v", s.value), false)
 		}
+
+		for _, ssid := range ap.SSIDs {
+			ssidID := ssidNodeID(ssid.SSID)
+			bandID := strings.ToLower(strings.ReplaceAll(ssid.Band, ".", ""))
+
+			ssidSensors := []struct {
+				name       string
+				suffix     string
+				value      interface{}
+				unit       string
+				devClass   string
+				stateClass string
+				icon       string
+			}{
+				{fmt.Sprintf("SSID %s %s Clients", ssid.SSID, ssid.Band), "clients", ssid.Clients, "clients", "", "measurement", "mdi:wifi"},
+				{fmt.Sprintf("SSID %s %s RX Total", ssid.SSID, ssid.Band), "rx_bytes", fmt.Sprintf("%.2f", float64(ssid.RxBytes)/1e9), "GB", "data_size", "total_increasing", "mdi:download-network"},
+				{fmt.Sprintf("SSID %s %s TX Total", ssid.SSID, ssid.Band), "tx_bytes", fmt.Sprintf("%.2f", float64(ssid.TxBytes)/1e9), "GB", "data_size", "total_increasing", "mdi:upload-network"},
+				{fmt.Sprintf("SSID %s %s Download", ssid.SSID, ssid.Band), "rx_rate", fmt.Sprintf("%.2f", ssid.RxRateMbps), "Mbit/s", "data_rate", "measurement", "mdi:download"},
+				{fmt.Sprintf("SSID %s %s Upload", ssid.SSID, ssid.Band), "tx_rate", fmt.Sprintf("%.2f", ssid.TxRateMbps), "Mbit/s", "data_rate", "measurement", "mdi:upload"},
+				{fmt.Sprintf("SSID %s %s Channel", ssid.SSID, ssid.Band), "channel", ssid.Channel, "", "", "measurement", "mdi:access-point"},
+				{fmt.Sprintf("SSID %s %s Noise", ssid.SSID, ssid.Band), "noise", ssid.Noise, "dBm", "signal_strength", "measurement", "mdi:signal-variant"},
+			}
+
+			for _, s := range ssidSensors {
+				uniqueID := fmt.Sprintf("openwrt_monitor_%s_ssid_%s_%s_%s", nodeID, ssidID, bandID, s.suffix)
+				configTopic := fmt.Sprintf("homeassistant/sensor/openwrt_monitor/%s_ssid_%s_%s_%s/config", nodeID, ssidID, bandID, s.suffix)
+				stateTopic := fmt.Sprintf("openwrt-monitor/sensor/%s/ssid/%s/%s/%s", nodeID, ssidID, bandID, s.suffix)
+
+				config := map[string]interface{}{
+					"name":        s.name,
+					"unique_id":   uniqueID,
+					"state_topic": stateTopic,
+					"device": map[string]interface{}{
+						"identifiers":  []string{fmt.Sprintf("openwrt_monitor_%s", nodeID)},
+						"name":         ap.Name,
+						"manufacturer": "OpenWrt",
+						"model":        "Access Point",
+						"via_device":   "openwrt_monitor",
+					},
+				}
+				if s.unit != "" {
+					config["unit_of_measurement"] = s.unit
+				}
+				if s.devClass != "" {
+					config["device_class"] = s.devClass
+				}
+				if s.stateClass != "" {
+					config["state_class"] = s.stateClass
+				}
+				if s.icon != "" {
+					config["icon"] = s.icon
+				}
+
+				m.publishJSON(configTopic, config, true)
+				m.publish(stateTopic, fmt.Sprintf("%v", s.value), false)
+			}
+		}
 	}
+}
+
+// PublishMonitorStatus publishes monitor online/offline + heartbeat timestamp.
+func (m *MQTTPublisher) PublishMonitorStatus(lastPoll time.Time) {
+	statusConfigTopic := "homeassistant/binary_sensor/openwrt_monitor/monitor_status/config"
+	statusStateTopic := "openwrt-monitor/status"
+	statusConfig := map[string]interface{}{
+		"name":        "OpenWrt Monitor Status",
+		"unique_id":   "openwrt_monitor_status",
+		"state_topic": statusStateTopic,
+		"payload_on":  "online",
+		"payload_off": "offline",
+		"icon":        "mdi:lan-check",
+		"device": map[string]interface{}{
+			"identifiers":  []string{"openwrt_monitor"},
+			"name":         "OpenWrt Monitor",
+			"manufacturer": "OpenWrt",
+			"model":        "HA Add-on",
+		},
+	}
+	m.publishJSON(statusConfigTopic, statusConfig, true)
+
+	heartbeatConfigTopic := "homeassistant/sensor/openwrt_monitor/last_update/config"
+	heartbeatStateTopic := "openwrt-monitor/heartbeat/last_update"
+	heartbeatConfig := map[string]interface{}{
+		"name":         "OpenWrt Monitor Last Update",
+		"unique_id":    "openwrt_monitor_last_update",
+		"state_topic":  heartbeatStateTopic,
+		"device_class": "timestamp",
+		"expire_after": m.heartbeatExpire,
+		"icon":         "mdi:clock-outline",
+		"device": map[string]interface{}{
+			"identifiers":  []string{"openwrt_monitor"},
+			"name":         "OpenWrt Monitor",
+			"manufacturer": "OpenWrt",
+			"model":        "HA Add-on",
+		},
+	}
+	m.publishJSON(heartbeatConfigTopic, heartbeatConfig, true)
+
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+	if !lastPoll.IsZero() {
+		timestamp = lastPoll.UTC().Format(time.RFC3339)
+	}
+	m.publish(heartbeatStateTopic, timestamp, false)
+}
+
+// PublishOfflineStatus explicitly marks the monitor as offline.
+func (m *MQTTPublisher) PublishOfflineStatus() {
+	m.publish("openwrt-monitor/status", "offline", true)
 }
 
 // PublishWANSensors publishes HA autodiscovery + state for WAN sensors.
@@ -402,6 +519,34 @@ func targetNodeID(name string) string {
 	id = strings.ReplaceAll(id, "-", "_")
 	id = strings.ReplaceAll(id, " ", "_")
 	return id
+}
+
+func ssidNodeID(ssid string) string {
+	id := strings.ToLower(strings.TrimSpace(ssid))
+	if id == "" {
+		return "unknown"
+	}
+	replacer := strings.NewReplacer(
+		" ", "_",
+		"/", "_",
+		"\\", "_",
+		".", "_",
+		"-", "_",
+		":", "_",
+	)
+	id = replacer.Replace(id)
+	var b strings.Builder
+	b.Grow(len(id))
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	if out == "" {
+		return "unknown"
+	}
+	return out
 }
 
 // uptimeToRFC3339 converts uptime in seconds to an RFC3339 timestamp.

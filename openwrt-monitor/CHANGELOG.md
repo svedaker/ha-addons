@@ -1,3 +1,4 @@
+- 0.1.5 Add per-SSID AP sensors (clients, RX/TX totals, rates, channel/noise) and monitor heartbeat/status sensors so Home Assistant can detect stalled or offline addon state
 - 0.1.4 Add per-band AP traffic sensors: 2.4/5 GHz RX/TX totals and download/upload rates (Mbit/s) via MQTT autodiscovery
 - 0.1.3 Improve HA readability: publish uptime in hours, add "Up Since" timestamp sensors, and report memory in MB
 - 0.1.2 Add router system sensors (load, memory available, uptime) via MQTT autodiscovery

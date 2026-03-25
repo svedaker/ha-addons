@@ -72,6 +72,8 @@ func main() {
 			runPollCycle(collector, mqttPub, state)
 		case sig := <-sigCh:
 			log.Printf("received signal %v, shutting down", sig)
+			mqttPub.PublishMonitorStatus(time.Now())
+			mqttPub.PublishOfflineStatus()
 			return
 		}
 	}
@@ -89,6 +91,7 @@ func runPollCycle(collector *Collector, mqttPub *MQTTPublisher, state *State) {
 	mqttPub.PublishMonitoredDevices(state.AllMonitoredDevices())
 
 	snap := state.Snapshot()
+	mqttPub.PublishMonitorStatus(snap.LastPoll)
 	log.Printf("poll done in %v — %d clients, %d APs, %d DHCP leases",
 		time.Since(start).Round(time.Millisecond),
 		len(snap.Clients),

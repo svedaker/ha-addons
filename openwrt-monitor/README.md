@@ -9,10 +9,12 @@ availability tracking for OpenWrt networks. Runs as a single Go binary
 - **Device tracking** — all WiFi clients from all APs, with home/not_home state
 - **Hostname resolution** — DHCP leases + host hints (covers static IP devices)
 - **AP sensors** — clients, load, memory, uptime, channel, noise per AP
+- **Per-SSID sensors** — clients, totals, rates, channel/noise per SSID and band
 - **Airtime utilization** — % channel busy time per band (2.4 GHz / 5 GHz)
 - **Roaming detection** — tracks which AP and band each client is on
 - **WAN monitoring** — status, uptime, public IP, total RX/TX, download/upload speed
 - **Monitored devices** — configurable list of MACs tracked as binary_sensor (online/offline with uptime/downtime)
+- **Monitor heartbeat** — status binary_sensor + `last_update` timestamp sensor with expiry
 - **HTTP status endpoint** — JSON dump of entire state at `/status`
 
 ## Compatibility

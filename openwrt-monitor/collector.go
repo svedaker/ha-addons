@@ -40,6 +40,18 @@ type APInfo struct {
 	AirtimeBusy5G   int64
 	AirtimeActive2G int64
 	AirtimeBusy2G   int64
+	SSIDs           map[string]SSIDInfo
+}
+
+// SSIDInfo holds aggregated stats for one SSID on one band.
+type SSIDInfo struct {
+	SSID    string
+	Band    string
+	Clients int
+	RxBytes int64
+	TxBytes int64
+	Channel int
+	Noise   int
 }
 
 // Collector polls all targets and updates the state.
@@ -243,8 +255,9 @@ func (c *Collector) fetchWANStatus(router *Target, now time.Time) {
 // fetchAPData gets WiFi clients and system info from one AP.
 func (c *Collector) fetchAPData(ap Target) ([]ScannedClient, APInfo, error) {
 	uc := c.clients[ap.Host]
-	var info APInfo
+	info := APInfo{SSIDs: map[string]SSIDInfo{}}
 	var allClients []ScannedClient
+	seenBandRadioStats := map[string]bool{}
 
 	// Get WiFi interface list
 	devices, err := c.getWifiDevices(uc, ap.Name)
@@ -255,6 +268,42 @@ func (c *Collector) fetchAPData(ap Target) ([]ScannedClient, APInfo, error) {
 	// Get assoclist + info + survey per interface
 	for _, dev := range devices {
 		band := guessBand(dev)
+		ssid := dev
+
+		// iwinfo.info — ssid, channel, noise
+		infoData, err := uc.Call("iwinfo", "info", map[string]interface{}{"device": dev})
+		if err == nil {
+			var iwInfo struct {
+				SSID    string `json:"ssid"`
+				Channel int    `json:"channel"`
+				Noise   int    `json:"noise"`
+			}
+			if json.Unmarshal(infoData, &iwInfo) == nil {
+				if iwInfo.SSID != "" {
+					ssid = iwInfo.SSID
+				}
+				if band == "5GHz" {
+					if info.Channel5G == 0 {
+						info.Channel5G = iwInfo.Channel
+					}
+					if info.Noise5G == 0 {
+						info.Noise5G = iwInfo.Noise
+					}
+				} else {
+					if info.Channel2G == 0 {
+						info.Channel2G = iwInfo.Channel
+					}
+					if info.Noise2G == 0 {
+						info.Noise2G = iwInfo.Noise
+					}
+				}
+			}
+		}
+
+		ssidKey := ssidBandKey(ssid, band)
+		ssidInfo := info.SSIDs[ssidKey]
+		ssidInfo.SSID = ssid
+		ssidInfo.Band = band
 
 		// assoclist
 		clients, err := c.getAssocList(uc, dev)
@@ -266,11 +315,12 @@ func (c *Collector) fetchAPData(ap Target) ([]ScannedClient, APInfo, error) {
 			clients[i].Band = band
 		}
 		allClients = append(allClients, clients...)
+		ssidInfo.Clients += len(clients)
 
 		if band == "5GHz" {
-			info.Clients5G = len(clients)
+			info.Clients5G += len(clients)
 		} else {
-			info.Clients2G = len(clients)
+			info.Clients2G += len(clients)
 		}
 
 		// network.device.status — per-band RX/TX counters on AP interfaces
@@ -283,38 +333,41 @@ func (c *Collector) fetchAPData(ap Target) ([]ScannedClient, APInfo, error) {
 				} `json:"statistics"`
 			}
 			if json.Unmarshal(devData, &devStatus) == nil {
+				ssidInfo.RxBytes += devStatus.Statistics.RxBytes
+				ssidInfo.TxBytes += devStatus.Statistics.TxBytes
 				if band == "5GHz" {
-					info.RxBytes5G = devStatus.Statistics.RxBytes
-					info.TxBytes5G = devStatus.Statistics.TxBytes
+					info.RxBytes5G += devStatus.Statistics.RxBytes
+					info.TxBytes5G += devStatus.Statistics.TxBytes
 				} else {
-					info.RxBytes2G = devStatus.Statistics.RxBytes
-					info.TxBytes2G = devStatus.Statistics.TxBytes
+					info.RxBytes2G += devStatus.Statistics.RxBytes
+					info.TxBytes2G += devStatus.Statistics.TxBytes
 				}
 			}
 		}
 
-		// iwinfo.info — channel, noise
-		infoData, err := uc.Call("iwinfo", "info", map[string]interface{}{"device": dev})
-		if err == nil {
-			var iwInfo struct {
-				Channel int `json:"channel"`
-				Noise   int `json:"noise"`
-			}
-			if json.Unmarshal(infoData, &iwInfo) == nil {
-				if band == "5GHz" {
-					info.Channel5G = iwInfo.Channel
-					info.Noise5G = iwInfo.Noise
-				} else {
-					info.Channel2G = iwInfo.Channel
-					info.Noise2G = iwInfo.Noise
-				}
-			}
+		if band == "5GHz" {
+			ssidInfo.Channel = info.Channel5G
+			ssidInfo.Noise = info.Noise5G
+		} else {
+			ssidInfo.Channel = info.Channel2G
+			ssidInfo.Noise = info.Noise2G
 		}
+		info.SSIDs[ssidKey] = ssidInfo
 
-		// iwinfo.survey — airtime
-		surveyData, err := uc.Call("iwinfo", "survey", map[string]interface{}{"device": dev})
-		if err == nil {
-			c.parseSurvey(surveyData, band, &info)
+		// iwinfo.survey is radio-level data and usually identical for all SSIDs on the same band.
+		if !seenBandRadioStats[band] {
+			surveyData, err := uc.Call("iwinfo", "survey", map[string]interface{}{"device": dev})
+			if err == nil {
+				totalActive, totalBusy := c.parseSurvey(surveyData)
+				if band == "5GHz" {
+					info.AirtimeActive5G = totalActive
+					info.AirtimeBusy5G = totalBusy
+				} else {
+					info.AirtimeActive2G = totalActive
+					info.AirtimeBusy2G = totalBusy
+				}
+				seenBandRadioStats[band] = true
+			}
 		}
 	}
 
@@ -340,6 +393,10 @@ func (c *Collector) fetchAPData(ap Target) ([]ScannedClient, APInfo, error) {
 	}
 
 	return allClients, info, nil
+}
+
+func ssidBandKey(ssid, band string) string {
+	return ssid + "|" + band
 }
 
 // getWifiDevices returns the list of WiFi AP interfaces (e.g. phy0-ap0, phy1-ap0).
@@ -415,8 +472,8 @@ func (c *Collector) getAssocList(uc *UbusClient, device string) ([]ScannedClient
 	return clients, nil
 }
 
-// parseSurvey extracts airtime data from iwinfo.survey result.
-func (c *Collector) parseSurvey(data json.RawMessage, band string, info *APInfo) {
+// parseSurvey extracts airtime counters from iwinfo.survey result.
+func (c *Collector) parseSurvey(data json.RawMessage) (int64, int64) {
 	var result struct {
 		Results []struct {
 			Frequency    int   `json:"frequency"`
@@ -427,7 +484,7 @@ func (c *Collector) parseSurvey(data json.RawMessage, band string, info *APInfo)
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil {
-		return
+		return 0, 0
 	}
 
 	// Sum all entries (usually one per active channel)
@@ -439,13 +496,7 @@ func (c *Collector) parseSurvey(data json.RawMessage, band string, info *APInfo)
 		}
 	}
 
-	if band == "5GHz" {
-		info.AirtimeActive5G = totalActive
-		info.AirtimeBusy5G = totalBusy
-	} else {
-		info.AirtimeActive2G = totalActive
-		info.AirtimeBusy2G = totalBusy
-	}
+	return totalActive, totalBusy
 }
 
 // guessBand determines band from interface name.
