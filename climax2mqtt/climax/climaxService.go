@@ -2,6 +2,7 @@ package climax
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -81,7 +82,7 @@ func (cfg *ClimaxConfig) SetDeviceSwitch(deviceId string, switchState bool, pd .
 	if apiResp.Result != 1 {
 		errMsg := fmt.Sprintf("setDeviceSwitch: failed with message: %s", apiResp.Message)
 		log.Println(errMsg)
-		return fmt.Errorf(errMsg)
+		return errors.New(errMsg)
 	}
 
 	log.Printf("setDeviceSwitch: successful - %s", apiResp.Message)

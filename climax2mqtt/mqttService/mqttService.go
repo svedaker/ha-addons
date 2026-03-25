@@ -1,8 +1,10 @@
 package mqttService
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
@@ -29,12 +31,19 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 func Connect(cfg MqttConfig) mqtt.Client {
 	opts := mqtt.NewClientOptions()
 	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", cfg.Server, cfg.Port))
-	opts.SetClientID("go_mqtt_client")
+	opts.SetClientID("climax2mqtt")
 	opts.SetUsername(cfg.Username)
 	opts.SetPassword(cfg.Password)
 	opts.SetCleanSession(false)
+	opts.SetAutoReconnect(true)
+	opts.SetConnectRetry(true)
+	opts.SetConnectRetryInterval(10 * time.Second)
+	opts.SetWill("climax2mqtt/status", "offline", 1, true)
 	opts.SetDefaultPublishHandler(messagePubHandler)
-	opts.OnConnect = connectHandler
+	opts.OnConnect = func(client mqtt.Client) {
+		connectHandler(client)
+		Publish(client, "climax2mqtt/status", "online", true)
+	}
 	opts.OnConnectionLost = connectLostHandler
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
@@ -52,4 +61,44 @@ func Subscribe(client mqtt.Client, topic string, callback mqtt.MessageHandler) {
 func Publish(client mqtt.Client, topic string, message interface{}, retain bool) {
 	token := client.Publish(topic, 1, retain, message)
 	token.Wait()
+}
+
+// PublishHeartbeat publishes HA discovery for status/last update and current heartbeat state.
+func PublishHeartbeat(client mqtt.Client, ts time.Time, expireAfterSec int) {
+	statusConfig := map[string]interface{}{
+		"name":        "climax2mqtt Status",
+		"unique_id":   "climax2mqtt_status",
+		"state_topic": "climax2mqtt/status",
+		"payload_on":  "online",
+		"payload_off": "offline",
+		"icon":        "mdi:lan-check",
+	}
+	Publish(client, "homeassistant/binary_sensor/climax2mqtt/status/config", mustJSON(statusConfig), true)
+
+	heartbeatConfig := map[string]interface{}{
+		"name":         "climax2mqtt Last Update",
+		"unique_id":    "climax2mqtt_last_update",
+		"state_topic":  "climax2mqtt/heartbeat/last_update",
+		"device_class": "timestamp",
+		"expire_after": expireAfterSec,
+		"icon":         "mdi:clock-outline",
+	}
+	Publish(client, "homeassistant/sensor/climax2mqtt/last_update/config", mustJSON(heartbeatConfig), true)
+
+	Publish(client, "climax2mqtt/status", "online", true)
+	Publish(client, "climax2mqtt/heartbeat/last_update", ts.UTC().Format(time.RFC3339), false)
+}
+
+// PublishOfflineStatus explicitly marks the service offline.
+func PublishOfflineStatus(client mqtt.Client) {
+	Publish(client, "climax2mqtt/status", "offline", true)
+}
+
+func mustJSON(v interface{}) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("mqtt: failed to marshal JSON payload: %v", err)
+		return "{}"
+	}
+	return string(data)
 }

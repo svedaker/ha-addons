@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -49,6 +51,9 @@ func main() {
 }
 
 func server(config *Config) {
+	const pollInterval = 10 * time.Second
+	const heartbeatExpireSec = 90
+
 	mqttClient := mqttService.Connect(config.Mqtt)
 	repo := climax.NewMemoryDeviceRepository()
 
@@ -57,26 +62,38 @@ func server(config *Config) {
 	}
 
 	mqttService.Subscribe(mqttClient, "climax2mqtt/switches/#", messageHandler)
+	mqttService.PublishHeartbeat(mqttClient, time.Now(), heartbeatExpireSec)
 
 	// Periodically fetch devices and publish updates
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		devices, err := config.Climax.GetDevices()
-		if err != nil {
-			log.Printf("Error fetching devices: %v", err)
-			continue
-		}
-		for _, device := range devices {
-			deviceId := device.Identify()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-			if repo.IsNewDevice(deviceId) {
-				publishDiscoveryMessages(device, mqttClient)
+	for {
+		select {
+		case <-ticker.C:
+			mqttService.PublishHeartbeat(mqttClient, time.Now(), heartbeatExpireSec)
+			devices, err := config.Climax.GetDevices()
+			if err != nil {
+				log.Printf("Error fetching devices: %v", err)
+				continue
 			}
-			if repo.AddOrUpdate(device) {
-				publishUpdateValueMessage(device, mqttClient)
+			for _, device := range devices {
+				deviceId := device.Identify()
+
+				if repo.IsNewDevice(deviceId) {
+					publishDiscoveryMessages(device, mqttClient)
+				}
+				if repo.AddOrUpdate(device) {
+					publishUpdateValueMessage(device, mqttClient)
+				}
 			}
+		case sig := <-sigCh:
+			log.Printf("Received signal %v, shutting down", sig)
+			mqttService.PublishOfflineStatus(mqttClient)
+			return
 		}
 	}
 }
