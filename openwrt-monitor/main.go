@@ -82,6 +82,7 @@ func main() {
 func runPollCycle(collector *Collector, mqttPub *MQTTPublisher, state *State) {
 	start := time.Now()
 	collector.Poll()
+	logMemoryUsage("after poll")
 
 	// Publish to MQTT
 	mqttPub.PublishDeviceTrackers(state.AllClients())
@@ -104,10 +105,17 @@ func startStatusServer(port int, state *State) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		snap := state.Snapshot()
+		payload := struct {
+			StateSnapshot
+			GoRuntime GoRuntimeStatus `json:"go_runtime"`
+		}{
+			StateSnapshot: snap,
+			GoRuntime:     collectGoRuntimeStatus(),
+		}
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		if err := enc.Encode(snap); err != nil {
+		if err := enc.Encode(payload); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})

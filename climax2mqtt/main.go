@@ -78,6 +78,7 @@ func server(config *Config) {
 			devices, err := config.Climax.GetDevices()
 			if err != nil {
 				log.Printf("Error fetching devices: %v", err)
+				logMemoryUsage("after poll error")
 				continue
 			}
 			for _, device := range devices {
@@ -90,6 +91,7 @@ func server(config *Config) {
 					publishUpdateValueMessage(device, mqttClient)
 				}
 			}
+			logMemoryUsage("after poll")
 		case sig := <-sigCh:
 			log.Printf("Received signal %v, shutting down", sig)
 			mqttService.PublishOfflineStatus(mqttClient)
