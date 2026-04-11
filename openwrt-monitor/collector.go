@@ -171,7 +171,9 @@ func (c *Collector) fetchDHCPLeases(router *Target) {
 	}
 
 	c.state.UpdateDHCPLeases(result.Leases)
-	log.Printf("[%s] DHCP leases: %d", router.Name, len(result.Leases))
+	if shouldLogLeaseCount(router.Name, len(result.Leases)) {
+		log.Printf("[%s] DHCP leases: %d", router.Name, len(result.Leases))
+	}
 }
 
 // fetchHostHints gets host hints from the router via luci-rpc.
@@ -192,7 +194,9 @@ func (c *Collector) fetchHostHints(router *Target) {
 	}
 
 	c.state.UpdateHostHints(hints)
-	log.Printf("[%s] host hints: %d", router.Name, len(hints))
+	if shouldLogHostHintCount(router.Name, len(hints)) {
+		log.Printf("[%s] host hints: %d", router.Name, len(hints))
+	}
 }
 
 // fetchWANStatus gets WAN interface status + traffic counters from the router.
@@ -247,9 +251,11 @@ func (c *Collector) fetchWANStatus(router *Target, now time.Time) {
 	}
 
 	c.state.UpdateWAN(wanStatus.Up, wanStatus.Uptime, wanDev, publicIP, rxBytes, txBytes, now)
-	log.Printf("[%s] WAN: up=%v uptime=%ds ip=%s rx=%.1fGB tx=%.1fGB",
-		router.Name, wanStatus.Up, wanStatus.Uptime, publicIP,
-		float64(rxBytes)/1e9, float64(txBytes)/1e9)
+	if shouldLogWANStatus(router.Name, wanStatus.Up, wanDev, publicIP) {
+		log.Printf("[%s] WAN: up=%v uptime=%ds ip=%s rx=%.1fGB tx=%.1fGB",
+			router.Name, wanStatus.Up, wanStatus.Uptime, publicIP,
+			float64(rxBytes)/1e9, float64(txBytes)/1e9)
+	}
 }
 
 // fetchAPData gets WiFi clients and system info from one AP.

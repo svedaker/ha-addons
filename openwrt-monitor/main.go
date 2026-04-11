@@ -93,12 +93,15 @@ func runPollCycle(collector *Collector, mqttPub *MQTTPublisher, state *State) {
 
 	snap := state.Snapshot()
 	mqttPub.PublishMonitorStatus(snap.LastPoll)
-	log.Printf("poll done in %v — %d clients, %d APs, %d DHCP leases",
-		time.Since(start).Round(time.Millisecond),
-		len(snap.Clients),
-		len(snap.APs),
-		snap.DHCPLeases,
-	)
+	duration := time.Since(start).Round(time.Millisecond)
+	if shouldLogPollSummary(duration, len(snap.Clients), len(snap.APs), snap.DHCPLeases) {
+		log.Printf("poll done in %v — %d clients, %d APs, %d DHCP leases",
+			duration,
+			len(snap.Clients),
+			len(snap.APs),
+			snap.DHCPLeases,
+		)
+	}
 }
 
 func startStatusServer(port int, state *State) {
