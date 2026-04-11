@@ -6,11 +6,9 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
-	"time"
 )
 
 const (
-	memorySnapshotInterval      = 15 * time.Minute
 	memorySnapshotUsageDeltaPct = 5.0
 )
 
@@ -32,7 +30,6 @@ var memoryLogState struct {
 	mu                 sync.Mutex
 	lastWarning        string
 	lastRecommendation string
-	lastSnapshotAt     time.Time
 	lastSnapshotUsage  float64
 	hasSnapshot        bool
 }
@@ -125,9 +122,7 @@ func shouldLogMemorySnapshot(decision MemoryLogDecision) bool {
 	memoryLogState.mu.Lock()
 	defer memoryLogState.mu.Unlock()
 
-	now := time.Now()
 	if !memoryLogState.hasSnapshot {
-		memoryLogState.lastSnapshotAt = now
 		memoryLogState.lastSnapshotUsage = decision.UsagePct
 		memoryLogState.hasSnapshot = true
 		return true
@@ -135,8 +130,6 @@ func shouldLogMemorySnapshot(decision MemoryLogDecision) bool {
 
 	shouldLog := false
 	if decision.Warning != "" {
-		shouldLog = true
-	} else if now.Sub(memoryLogState.lastSnapshotAt) >= memorySnapshotInterval {
 		shouldLog = true
 	} else {
 		delta := decision.UsagePct - memoryLogState.lastSnapshotUsage
@@ -149,7 +142,6 @@ func shouldLogMemorySnapshot(decision MemoryLogDecision) bool {
 	}
 
 	if shouldLog {
-		memoryLogState.lastSnapshotAt = now
 		memoryLogState.lastSnapshotUsage = decision.UsagePct
 	}
 
