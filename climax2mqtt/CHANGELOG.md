@@ -1,4 +1,5 @@
 
+- 0.1.15 Reduce runtime memory log spam by throttling periodic snapshots and lower default GOMEMLIMIT to 32 MiB
 - 0.1.14 Add MQTT heartbeat and status (LWT) with Home Assistant discovery for last update timestamp and online/offline state
 - 0.1.13 Added stage_class to mqtt discovery message
 - 0.1.12 Update dependencies for security vulnerabilities, added retaing flag on config messages (golang.org/x/net v0.50.0, paho.mqtt.golang v1.5.1)

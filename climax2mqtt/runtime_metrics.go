@@ -6,6 +6,12 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"time"
+)
+
+const (
+	memorySnapshotInterval      = 15 * time.Minute
+	memorySnapshotUsageDeltaPct = 5.0
 )
 
 type MemoryLogDecision struct {
@@ -26,6 +32,9 @@ var memoryLogState struct {
 	mu                 sync.Mutex
 	lastWarning        string
 	lastRecommendation string
+	lastSnapshotAt     time.Time
+	lastSnapshotUsage  float64
+	hasSnapshot        bool
 }
 
 func evaluateMemoryUsage() MemoryLogDecision {
@@ -91,22 +100,60 @@ func recommendLowerLimitMiB(rssApproxBytes uint64) int64 {
 
 func logMemoryUsage(context string) {
 	decision := evaluateMemoryUsage()
-	base := fmt.Sprintf(
-		"memory %s: rss~=%s heap_alloc=%s heap_inuse=%s goroutines=%d gc=%d",
-		context,
-		formatMiB(decision.RSSApproxBytes),
-		formatMiB(decision.HeapAllocBytes),
-		formatMiB(decision.HeapInUseBytes),
-		decision.Goroutines,
-		decision.NumGC,
-	)
+	if shouldLogMemorySnapshot(decision) {
+		base := fmt.Sprintf(
+			"memory %s: rss~=%s heap_alloc=%s heap_inuse=%s goroutines=%d gc=%d",
+			context,
+			formatMiB(decision.RSSApproxBytes),
+			formatMiB(decision.HeapAllocBytes),
+			formatMiB(decision.HeapInUseBytes),
+			decision.Goroutines,
+			decision.NumGC,
+		)
 
-	if decision.LimitBytes > 0 {
-		base = fmt.Sprintf("%s gomemlimit=%d MiB usage=%.1f%%", base, decision.LimitBytes/(1024*1024), decision.UsagePct)
+		if decision.LimitBytes > 0 {
+			base = fmt.Sprintf("%s gomemlimit=%d MiB usage=%.1f%%", base, decision.LimitBytes/(1024*1024), decision.UsagePct)
+		}
+
+		log.Println(base)
 	}
 
-	log.Println(base)
 	logMemoryTransitions(decision)
+}
+
+func shouldLogMemorySnapshot(decision MemoryLogDecision) bool {
+	memoryLogState.mu.Lock()
+	defer memoryLogState.mu.Unlock()
+
+	now := time.Now()
+	if !memoryLogState.hasSnapshot {
+		memoryLogState.lastSnapshotAt = now
+		memoryLogState.lastSnapshotUsage = decision.UsagePct
+		memoryLogState.hasSnapshot = true
+		return true
+	}
+
+	shouldLog := false
+	if decision.Warning != "" {
+		shouldLog = true
+	} else if now.Sub(memoryLogState.lastSnapshotAt) >= memorySnapshotInterval {
+		shouldLog = true
+	} else {
+		delta := decision.UsagePct - memoryLogState.lastSnapshotUsage
+		if delta < 0 {
+			delta = -delta
+		}
+		if delta >= memorySnapshotUsageDeltaPct {
+			shouldLog = true
+		}
+	}
+
+	if shouldLog {
+		memoryLogState.lastSnapshotAt = now
+		memoryLogState.lastSnapshotUsage = decision.UsagePct
+	}
+
+	return shouldLog
 }
 
 func logMemoryTransitions(decision MemoryLogDecision) {

@@ -1,6 +1,6 @@
 {
     "name": "climax2mqtt",
-    "version": "0.1.14",
+    "version": "0.1.15",
     "slug": "climax2mqttgo",
     "description": "climax2qmtt build with Go",
     "arch": [
