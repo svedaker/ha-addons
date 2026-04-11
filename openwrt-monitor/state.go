@@ -485,18 +485,25 @@ func (s *State) InitMonitoredDevices(devices []MonitoredDevCfg) {
 	}
 }
 
-// UpdateMonitoredDevices checks host hints + DHCP leases for each monitored device.
+// UpdateMonitoredDevices checks Wi-Fi associations, host hints, and DHCP leases for each monitored device.
 func (s *State) UpdateMonitoredDevices(now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for mac, dev := range s.monitoredDevices {
-		// Check if device is visible in host hints or DHCP leases
+		// Prefer active Wi-Fi associations, then fall back to host hints and DHCP leases.
 		ip := ""
 		seen := false
 
+		if client, ok := s.clients[mac]; ok && client.Location == "home" {
+			ip = client.IP
+			seen = true
+		}
+
 		if hint, ok := s.hostHints[mac]; ok && len(hint.IPAddrs) > 0 {
-			ip = hint.IPAddrs[0]
+			if ip == "" {
+				ip = hint.IPAddrs[0]
+			}
 			seen = true
 		}
 		if lease, ok := s.dhcpLeases[mac]; ok && lease.IP != "" {

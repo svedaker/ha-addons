@@ -1,3 +1,4 @@
+- 0.1.9 Fix monitored device presence so WiFi-associated clients are marked online even without matching DHCP lease or host hint
 - 0.1.8 Reduce runtime memory log spam by throttling snapshots and lower default GOMEMLIMIT to 32 MiB
 - 0.1.7 Quiet WAN startup logging by only emitting WAN status lines when the router WAN state actually changes
 - 0.1.6 Reduce routine poll log spam by logging router counts and poll summaries only when state changes or polls become slow

@@ -261,7 +261,7 @@ Not all roles are required. The add-on adapts to whatever targets are configured
 ### Monitored devices
 
 Optional list of network devices to track as `binary_sensor` entities (online/offline).
-Devices are detected via DHCP leases and host hints — works for both WiFi and wired devices.
+Devices are detected from active WiFi associations first, then DHCP leases and host hints.
 
 ```yaml
 monitored_devices:
