@@ -1,3 +1,6 @@
+- 0.1.12 Improve client naming by resolving hostname from host hints or monitored device names via matching IP when lease hostname is missing
+- 0.1.11 Prune stale not_home WiFi clients after 7 days and remove stale MQTT device_tracker discovery entries
+- 0.1.10 Add presence transition logs for WiFi clients when state changes between home and away
 - 0.1.9 Fix monitored device presence so WiFi-associated clients are marked online even without matching DHCP lease or host hint
 - 0.1.8 Reduce runtime memory log spam by throttling snapshots and lower default GOMEMLIMIT to 32 MiB
 - 0.1.7 Quiet WAN startup logging by only emitting WAN status lines when the router WAN state actually changes

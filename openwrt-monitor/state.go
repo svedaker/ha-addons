@@ -1,10 +1,13 @@
 package main
 
 import (
+	"log"
 	"strings"
 	"sync"
 	"time"
 )
+
+const staleNotHomeClientTTL = 7 * 24 * time.Hour
 
 // Client represents a tracked WiFi client device.
 type Client struct {
@@ -243,6 +246,12 @@ func (s *State) UpdateClients(apName string, clients []ScannedClient, now time.T
 			}
 		}
 
+		if (hostname == "" || hostname == mac) && ip != "" {
+			if resolved := s.resolveHostnameByIP(ip); resolved != "" {
+				hostname = resolved
+			}
+		}
+
 		if !found {
 			// New client
 			s.clients[mac] = &Client{
@@ -263,10 +272,12 @@ func (s *State) UpdateClients(apName string, clients []ScannedClient, now time.T
 				RxBytes:        sc.RxBytes,
 				TxBytes:        sc.TxBytes,
 			}
+			log.Printf("[presence] %s (%s) transition: away -> home ap=%s", hostnameOrMAC(hostname, mac), mac, apName)
 		} else {
 			// Existing client
 			if existing.Location == "not_home" {
 				// Coming back — new session
+				log.Printf("[presence] %s (%s) transition: away -> home ap=%s", hostnameOrMAC(hostname, mac), mac, apName)
 				existing.ConnectedSince = now
 			}
 			existing.Hostname = hostname
@@ -296,7 +307,15 @@ func (s *State) MarkAbsent(seenMACs map[string]bool, gracePeriod time.Duration, 
 		if seenMACs[mac] {
 			continue
 		}
+
+		absentFor := now.Sub(c.LastSeen)
 		if c.Location == "home" && now.Sub(c.LastSeen) > gracePeriod {
+			log.Printf("[presence] %s (%s) transition: home -> away last_ap=%s last_seen=%s",
+				hostnameOrMAC(c.Hostname, mac),
+				mac,
+				c.LastAP,
+				absentFor.Round(time.Second),
+			)
 			c.Location = "not_home"
 			c.AP = ""
 			c.Band = ""
@@ -305,6 +324,11 @@ func (s *State) MarkAbsent(seenMACs map[string]bool, gracePeriod time.Duration, 
 			c.ConnectedTime = 0
 			c.RxRate = 0
 			c.TxRate = 0
+		}
+
+		if c.Location == "not_home" && absentFor > staleNotHomeClientTTL {
+			log.Printf("[presence] pruning stale client %s (%s) last_seen=%s", hostnameOrMAC(c.Hostname, mac), mac, absentFor.Round(time.Second))
+			delete(s.clients, mac)
 		}
 	}
 }
@@ -652,4 +676,32 @@ func normMAC(mac string) string {
 		}
 	}
 	return string(result)
+}
+
+func hostnameOrMAC(hostname string, mac string) string {
+	if hostname == "" || hostname == mac {
+		return mac
+	}
+	return hostname
+}
+
+func (s *State) resolveHostnameByIP(ip string) string {
+	for _, hint := range s.hostHints {
+		if hint.Name == "" {
+			continue
+		}
+		for _, addr := range hint.IPAddrs {
+			if addr == ip {
+				return stripDomain(hint.Name)
+			}
+		}
+	}
+
+	for _, dev := range s.monitoredDevices {
+		if dev.Name != "" && dev.IP == ip {
+			return dev.Name
+		}
+	}
+
+	return ""
 }

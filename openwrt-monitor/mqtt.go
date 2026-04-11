@@ -15,6 +15,7 @@ type MQTTPublisher struct {
 	client          mqtt.Client
 	location        string
 	heartbeatExpire int
+	knownTrackers   map[string]struct{}
 }
 
 // NewMQTTPublisher connects to the MQTT broker.
@@ -54,13 +55,17 @@ func NewMQTTPublisher(cfg *Config) (*MQTTPublisher, error) {
 		client:          client,
 		location:        cfg.Location,
 		heartbeatExpire: heartbeatExpire,
+		knownTrackers:   make(map[string]struct{}),
 	}, nil
 }
 
 // PublishDeviceTrackers publishes HA autodiscovery + state for all clients.
 func (m *MQTTPublisher) PublishDeviceTrackers(clients map[string]*Client) {
+	currentTrackers := make(map[string]struct{}, len(clients))
+
 	for mac, c := range clients {
 		nodeID := macToNodeID(mac)
+		currentTrackers[nodeID] = struct{}{}
 
 		// Autodiscovery config (retained)
 		configTopic := fmt.Sprintf("homeassistant/device_tracker/openwrt_monitor/%s/config", nodeID)
@@ -116,6 +121,26 @@ func (m *MQTTPublisher) PublishDeviceTrackers(clients map[string]*Client) {
 			attrs["last_seen"] = c.LastSeen.Format(time.RFC3339)
 		}
 		m.publishJSON(attrTopic, attrs, false)
+	}
+
+	m.cleanupStaleTrackers(currentTrackers)
+}
+
+func (m *MQTTPublisher) cleanupStaleTrackers(currentTrackers map[string]struct{}) {
+	for nodeID := range m.knownTrackers {
+		if _, ok := currentTrackers[nodeID]; ok {
+			continue
+		}
+
+		configTopic := fmt.Sprintf("homeassistant/device_tracker/openwrt_monitor/%s/config", nodeID)
+		// Empty retained config removes the stale entity from Home Assistant discovery.
+		m.publish(configTopic, "", true)
+		delete(m.knownTrackers, nodeID)
+		log.Printf("[mqtt] removed stale device_tracker discovery: %s", nodeID)
+	}
+
+	for nodeID := range currentTrackers {
+		m.knownTrackers[nodeID] = struct{}{}
 	}
 }
 
