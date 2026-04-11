@@ -92,6 +92,11 @@ func (c *Collector) Poll() {
 			continue
 		}
 
+		location := c.cfg.Location
+		if strings.TrimSpace(ap.Location) != "" {
+			location = normalizeLocation(ap.Location)
+		}
+
 		// Update AP state
 		c.state.UpdateAPState(ap.Name, apInfo, now)
 
@@ -102,7 +107,7 @@ func (c *Collector) Poll() {
 		}
 
 		// Update client state
-		c.state.UpdateClients(ap.Name, clients, now)
+		c.state.UpdateClients(ap.Name, location, clients, now)
 	}
 
 	// 3. Update monitored devices (uses host hints + DHCP leases already fetched)

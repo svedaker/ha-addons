@@ -1,7 +1,7 @@
 {
   "name": "OpenWrt Monitor",
   "description": "WiFi client tracking, AP monitoring, WAN monitoring, and device availability via OpenWrt ubus JSON-RPC",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "slug": "openwrt_monitor",
   "url": "https://github.com/svedaker/ha-addons",
   "arch": ["amd64", "aarch64", "armv7"],
@@ -24,7 +24,8 @@
       {
         "host": "192.168.1.1",
         "name": "router",
-        "role": "router"
+        "role": "router",
+        "location": "home"
       }
     ],
     "monitored_devices": []
@@ -45,7 +46,8 @@
       {
         "host": "str",
         "name": "str",
-        "role": "list(ap|router|both)"
+        "role": "list(ap|router|both)",
+        "location": "str?"
       }
     ],
     "monitored_devices": [

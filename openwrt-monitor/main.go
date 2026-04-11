@@ -85,11 +85,11 @@ func runPollCycle(collector *Collector, mqttPub *MQTTPublisher, state *State) {
 	logMemoryUsage("after poll")
 
 	// Publish to MQTT
-	mqttPub.PublishDeviceTrackers(state.AllClients())
+	monitored := state.AllMonitoredDevices()
+	mqttPub.PublishDeviceTrackers(state.AllClients(), monitored)
 	mqttPub.PublishAPSensors(state.AllAPs())
 	mqttPub.PublishRouterSensors(state.GetRouter())
 	mqttPub.PublishWANSensors(state.GetWAN())
-	mqttPub.PublishMonitoredDevices(state.AllMonitoredDevices())
 
 	snap := state.Snapshot()
 	mqttPub.PublishMonitorStatus(snap.LastPoll)

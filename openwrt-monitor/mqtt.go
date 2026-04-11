@@ -16,7 +16,20 @@ type MQTTPublisher struct {
 	location        string
 	heartbeatExpire int
 	knownTrackers   map[string]struct{}
+	cleanedLegacy   map[string]struct{}
 }
+
+type trackerRecord struct {
+	nodeID      string
+	displayName string
+	state       string
+	attrs       map[string]interface{}
+}
+
+const (
+	trackerManufacturer = "Network"
+	trackerModel        = "Tracked Device"
+)
 
 // NewMQTTPublisher connects to the MQTT broker.
 func NewMQTTPublisher(cfg *Config) (*MQTTPublisher, error) {
@@ -56,63 +69,38 @@ func NewMQTTPublisher(cfg *Config) (*MQTTPublisher, error) {
 		location:        cfg.Location,
 		heartbeatExpire: heartbeatExpire,
 		knownTrackers:   make(map[string]struct{}),
+		cleanedLegacy:   make(map[string]struct{}),
 	}, nil
 }
 
-// PublishDeviceTrackers publishes HA autodiscovery + state for all clients.
-func (m *MQTTPublisher) PublishDeviceTrackers(clients map[string]*Client) {
-	currentTrackers := make(map[string]struct{}, len(clients))
+// PublishDeviceTrackers merges tracker candidates from Wi-Fi scans and monitored devices,
+// applies monitored precedence per MAC, and publishes a unique tracker list.
+func (m *MQTTPublisher) PublishDeviceTrackers(clients map[string]*Client, monitored map[string]*MonitoredDevice) {
+	records := make(map[string]trackerRecord, len(clients)+len(monitored))
+	currentTrackers := make(map[string]struct{}, len(clients)+len(monitored))
 
 	for mac, c := range clients {
 		nodeID := macToNodeID(mac)
-		currentTrackers[nodeID] = struct{}{}
-
-		// Autodiscovery config (retained)
-		configTopic := fmt.Sprintf("homeassistant/device_tracker/openwrt_monitor/%s/config", nodeID)
-
 		// Use hostname as display name; fall back to MAC if unknown
 		displayName := c.Hostname
 		if displayName == "" || displayName == mac {
 			displayName = mac
 		}
 
-		configPayload := map[string]interface{}{
-			"name":                  displayName,
-			"unique_id":             fmt.Sprintf("openwrt_monitor_%s", nodeID),
-			"state_topic":           fmt.Sprintf("openwrt-monitor/device_tracker/%s/state", nodeID),
-			"json_attributes_topic": fmt.Sprintf("openwrt-monitor/device_tracker/%s/attributes", nodeID),
-			"source_type":           "router",
-			"payload_home":          "home",
-			"payload_not_home":      "not_home",
-			"device": map[string]interface{}{
-				"identifiers":  []string{fmt.Sprintf("openwrt_monitor_%s", nodeID)},
-				"name":         displayName,
-				"manufacturer": "WiFi",
-				"model":        "Client",
-				"via_device":   "openwrt_monitor",
-			},
-		}
-		m.publishJSON(configTopic, configPayload, true)
-
-		// State
-		stateTopic := fmt.Sprintf("openwrt-monitor/device_tracker/%s/state", nodeID)
-		m.publish(stateTopic, c.Location, false)
-
-		// Attributes
-		attrTopic := fmt.Sprintf("openwrt-monitor/device_tracker/%s/attributes", nodeID)
 		attrs := map[string]interface{}{
-			"source_type":    "router",
-			"mac":            mac,
-			"hostname":       c.Hostname,
-			"ip":             c.IP,
-			"ap":             c.AP,
-			"band":           c.Band,
-			"signal":         c.Signal,
-			"signal_avg":     c.SignalAvg,
-			"connected_time": c.ConnectedTime,
-			"last_ap":        c.LastAP,
-			"rx_rate_mbps":   float64(c.RxRate) / 1e6,
-			"tx_rate_mbps":   float64(c.TxRate) / 1e6,
+			"source_type":     "router",
+			"tracking_source": "wifi_scan",
+			"mac":             mac,
+			"hostname":        c.Hostname,
+			"ip":              c.IP,
+			"ap":              c.AP,
+			"band":            c.Band,
+			"signal":          c.Signal,
+			"signal_avg":      c.SignalAvg,
+			"connected_time":  c.ConnectedTime,
+			"last_ap":         c.LastAP,
+			"rx_rate_mbps":    float64(c.RxRate) / 1e6,
+			"tx_rate_mbps":    float64(c.TxRate) / 1e6,
 		}
 		if !c.ConnectedSince.IsZero() {
 			attrs["connected_since"] = c.ConnectedSince.Format(time.RFC3339)
@@ -120,10 +108,110 @@ func (m *MQTTPublisher) PublishDeviceTrackers(clients map[string]*Client) {
 		if !c.LastSeen.IsZero() {
 			attrs["last_seen"] = c.LastSeen.Format(time.RFC3339)
 		}
-		m.publishJSON(attrTopic, attrs, false)
+
+		records[nodeID] = trackerRecord{
+			nodeID:      nodeID,
+			displayName: displayName,
+			state:       c.Location,
+			attrs:       attrs,
+		}
+	}
+
+	for _, dev := range monitored {
+		nodeID := macToNodeID(dev.MAC)
+		m.cleanupLegacyMonitoredTopics(nodeID)
+
+		displayName := dev.Name
+		if displayName == "" {
+			displayName = dev.MAC
+		}
+
+		attrs := map[string]interface{}{
+			"source_type":     "router",
+			"tracking_source": "monitored",
+			"mac":             dev.MAC,
+			"ip":              dev.IP,
+		}
+		if !dev.OnlineSince.IsZero() {
+			attrs["online_since"] = dev.OnlineSince.Format(time.RFC3339)
+			if dev.Online {
+				uptime := time.Since(dev.OnlineSince).Round(time.Second)
+				attrs["uptime"] = uptime.String()
+				attrs["uptime_seconds"] = int(uptime.Seconds())
+			}
+		}
+		if !dev.LastSeen.IsZero() {
+			attrs["last_seen"] = dev.LastSeen.Format(time.RFC3339)
+		}
+		if !dev.OfflineSince.IsZero() {
+			attrs["offline_since"] = dev.OfflineSince.Format(time.RFC3339)
+			if !dev.Online {
+				downtime := time.Since(dev.OfflineSince).Round(time.Second)
+				attrs["downtime"] = downtime.String()
+				attrs["downtime_seconds"] = int(downtime.Seconds())
+			}
+		}
+
+		state := "not_home"
+		if dev.Online {
+			state = "home"
+		}
+
+		records[nodeID] = trackerRecord{
+			nodeID:      nodeID,
+			displayName: displayName,
+			state:       state,
+			attrs:       attrs,
+		}
+	}
+
+	for nodeID, rec := range records {
+		m.publishTrackerEntity(nodeID, rec.displayName, rec.state, rec.attrs)
+		currentTrackers[nodeID] = struct{}{}
 	}
 
 	m.cleanupStaleTrackers(currentTrackers)
+}
+
+func (m *MQTTPublisher) cleanupLegacyMonitoredTopics(nodeID string) {
+	if _, done := m.cleanedLegacy[nodeID]; done {
+		return
+	}
+
+	legacyBinaryConfigTopic := fmt.Sprintf("homeassistant/binary_sensor/openwrt_monitor/dev_%s/config", nodeID)
+	m.publish(legacyBinaryConfigTopic, "", true)
+
+	legacyMonitoredTrackerConfigTopic := fmt.Sprintf("homeassistant/device_tracker/openwrt_monitor/monitored_%s/config", nodeID)
+	m.publish(legacyMonitoredTrackerConfigTopic, "", true)
+
+	m.cleanedLegacy[nodeID] = struct{}{}
+}
+
+func (m *MQTTPublisher) publishTrackerEntity(nodeID string, displayName string, state string, attrs map[string]interface{}) {
+	configTopic := fmt.Sprintf("homeassistant/device_tracker/openwrt_monitor/%s/config", nodeID)
+	stateTopic := fmt.Sprintf("openwrt-monitor/device_tracker/%s/state", nodeID)
+	attrTopic := fmt.Sprintf("openwrt-monitor/device_tracker/%s/attributes", nodeID)
+
+	configPayload := map[string]interface{}{
+		"name":                  displayName,
+		"unique_id":             fmt.Sprintf("openwrt_monitor_%s", nodeID),
+		"state_topic":           stateTopic,
+		"json_attributes_topic": attrTopic,
+		"source_type":           "router",
+		"payload_home":          "home",
+		"payload_not_home":      "not_home",
+		"device": map[string]interface{}{
+			"identifiers":  []string{fmt.Sprintf("openwrt_monitor_%s", nodeID)},
+			"name":         displayName,
+			"manufacturer": trackerManufacturer,
+			"model":        trackerModel,
+			"via_device":   "openwrt_monitor",
+		},
+	}
+
+	m.publishJSON(configTopic, configPayload, true)
+	m.publish(stateTopic, state, false)
+	m.publishJSON(attrTopic, attrs, false)
 }
 
 func (m *MQTTPublisher) cleanupStaleTrackers(currentTrackers map[string]struct{}) {
@@ -135,7 +223,9 @@ func (m *MQTTPublisher) cleanupStaleTrackers(currentTrackers map[string]struct{}
 		configTopic := fmt.Sprintf("homeassistant/device_tracker/openwrt_monitor/%s/config", nodeID)
 		// Empty retained config removes the stale entity from Home Assistant discovery.
 		m.publish(configTopic, "", true)
+		m.cleanupLegacyMonitoredTopics(nodeID)
 		delete(m.knownTrackers, nodeID)
+		delete(m.cleanedLegacy, nodeID)
 		log.Printf("[mqtt] removed stale device_tracker discovery: %s", nodeID)
 	}
 
@@ -447,66 +537,6 @@ func (m *MQTTPublisher) PublishRouterSensors(router RouterState) {
 	}
 }
 
-// PublishMonitoredDevices publishes HA autodiscovery + state for monitored devices as binary_sensors.
-func (m *MQTTPublisher) PublishMonitoredDevices(devices map[string]*MonitoredDevice) {
-	for _, dev := range devices {
-		nodeID := macToNodeID(dev.MAC)
-
-		// Autodiscovery config (retained)
-		configTopic := fmt.Sprintf("homeassistant/binary_sensor/openwrt_monitor/dev_%s/config", nodeID)
-		stateTopic := fmt.Sprintf("openwrt-monitor/monitored/%s/state", nodeID)
-		attrTopic := fmt.Sprintf("openwrt-monitor/monitored/%s/attributes", nodeID)
-
-		config := map[string]interface{}{
-			"name":                  dev.Name,
-			"unique_id":             fmt.Sprintf("openwrt_monitor_dev_%s", nodeID),
-			"state_topic":           stateTopic,
-			"json_attributes_topic": attrTopic,
-			"payload_on":            "ON",
-			"payload_off":           "OFF",
-			"device_class":          "connectivity",
-			"icon":                  "mdi:lan-connect",
-			"device": map[string]interface{}{
-				"identifiers":  []string{fmt.Sprintf("openwrt_monitor_dev_%s", nodeID)},
-				"name":         dev.Name,
-				"manufacturer": "Network",
-				"model":        "Monitored Device",
-				"via_device":   "openwrt_monitor",
-			},
-		}
-		m.publishJSON(configTopic, config, true)
-
-		// State
-		m.publish(stateTopic, boolToOnOff(dev.Online), false)
-
-		// Attributes
-		attrs := map[string]interface{}{
-			"mac": dev.MAC,
-			"ip":  dev.IP,
-		}
-		if !dev.OnlineSince.IsZero() {
-			attrs["online_since"] = dev.OnlineSince.Format(time.RFC3339)
-			if dev.Online {
-				uptime := time.Since(dev.OnlineSince).Round(time.Second)
-				attrs["uptime"] = uptime.String()
-				attrs["uptime_seconds"] = int(uptime.Seconds())
-			}
-		}
-		if !dev.LastSeen.IsZero() {
-			attrs["last_seen"] = dev.LastSeen.Format(time.RFC3339)
-		}
-		if !dev.OfflineSince.IsZero() {
-			attrs["offline_since"] = dev.OfflineSince.Format(time.RFC3339)
-			if !dev.Online {
-				downtime := time.Since(dev.OfflineSince).Round(time.Second)
-				attrs["downtime"] = downtime.String()
-				attrs["downtime_seconds"] = int(downtime.Seconds())
-			}
-		}
-		m.publishJSON(attrTopic, attrs, false)
-	}
-}
-
 // Close disconnects from the MQTT broker.
 func (m *MQTTPublisher) Close() {
 	m.client.Disconnect(1000)
@@ -535,7 +565,8 @@ func (m *MQTTPublisher) publishJSON(topic string, payload interface{}, retained 
 
 // macToNodeID converts "6c:2f:80:d6:2f:f4" to "6c2f80d62ff4".
 func macToNodeID(mac string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(mac, ":", ""), "-", "")
+	normalized := strings.ToLower(strings.TrimSpace(mac))
+	return strings.ReplaceAll(strings.ReplaceAll(normalized, ":", ""), "-", "")
 }
 
 // targetNodeID normalizes target names from config for MQTT/HA IDs.

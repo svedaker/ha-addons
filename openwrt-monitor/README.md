@@ -13,7 +13,7 @@ availability tracking for OpenWrt networks. Runs as a single Go binary
 - **Airtime utilization** — % channel busy time per band (2.4 GHz / 5 GHz)
 - **Roaming detection** — tracks which AP and band each client is on
 - **WAN monitoring** — status, uptime, public IP, total RX/TX, download/upload speed
-- **Monitored devices** — configurable list of MACs tracked as binary_sensor (online/offline with uptime/downtime)
+- **Monitored devices** — configurable list of MACs tracked as device_tracker (`home`/`not_home` with uptime/downtime)
 - **Monitor heartbeat** — status binary_sensor + `last_update` timestamp sensor with expiry
 - **HTTP status endpoint** — JSON dump of entire state at `/status`
 
@@ -203,7 +203,7 @@ curl -sk https://ROUTER_IP/ubus -d '{
 |--------|---------|-------------|
 | `interval` | 30 | Poll interval in seconds |
 | `grace_period` | 120 | Seconds before marking device as `not_home` |
-| `location` | "home" | Location name for home state |
+| `location` | "home" | Default location used for AP presence state |
 | `status_port` | 8099 | HTTP port for `/status` endpoint |
 | `mqtt_host` | — | MQTT broker IP |
 | `mqtt_port` | 1883 | MQTT broker port |
@@ -213,11 +213,11 @@ curl -sk https://ROUTER_IP/ubus -d '{
 | `ubus_password` | — | ubus login password |
 | `ubus_scheme` | "https" | "http" or "https" |
 | `targets` | — | Array of OpenWrt devices (see below) |
-| `monitored_devices` | [] | Array of MACs to track online/offline (see below) |
+| `monitored_devices` | [] | Array of MACs to track as `home`/`not_home` (see below) |
 
 ### Targets
 
-Each target is an OpenWrt device with a role:
+Each target is an OpenWrt device with a role. You can also set optional per-target `location` to map AP presence to a specific HA zone/state.
 
 ```yaml
 targets:
@@ -227,14 +227,17 @@ targets:
   - host: "192.168.1.10"
     name: "ap-living-room"
     role: "ap"           # Polls: iwinfo, system info, airtime survey
+    location: "home"      # Optional; defaults to top-level location
   - host: "192.168.1.11"
     name: "ap-office"
     role: "ap"
+    location: "work"
 ```
 
 - **router** — provides DHCP leases, host hints, WAN data
 - **ap** — provides WiFi client data, airtime, system metrics
 - **both** — single device acting as router + AP (gets all polls)
+- **location (optional)** — zone/state to publish for clients on this AP (for example `home`, `work`, `holiday_house`)
 
 Example with a single all-in-one OpenWrt device:
 
@@ -260,8 +263,9 @@ Not all roles are required. The add-on adapts to whatever targets are configured
 
 ### Monitored devices
 
-Optional list of network devices to track as `binary_sensor` entities (online/offline).
+Optional list of network devices to track as `device_tracker` entities (`home`/`not_home`).
 Devices are detected from active WiFi associations first, then DHCP leases and host hints.
+The configured monitored device name is also reused as the client tracker display name for the same MAC.
 
 ```yaml
 monitored_devices:
@@ -279,7 +283,7 @@ monitored_devices:
 
 | Attribute | Example | Description |
 |-----------|---------|-------------|
-| `state` | home / not_home | Based on WiFi association |
+| `state` | home / work / holiday_house / not_home | Based on AP association and configured target location |
 | `ap` | ap-office | Current AP name |
 | `band` | 5GHz | 2.4GHz or 5GHz |
 | `signal` | -63 | Signal strength (dBm) |
@@ -329,11 +333,11 @@ monitored_devices:
 | WAN Download | Mbit/s | Current download rate |
 | WAN Upload | Mbit/s | Current upload rate |
 
-### Monitored device — `binary_sensor`
+### Monitored device — `device_tracker`
 
 | Attribute | Example | Description |
 |-----------|---------|-------------|
-| `state` | ON / OFF | Device visible on network |
+| `state` | home / not_home | Device visible on network |
 | `mac` | aa:bb:cc:dd:ee:01 | MAC address |
 | `ip` | 192.168.1.50 | Last known IP |
 | `online_since` | 2026-03-22T10:00:00Z | When device came online |

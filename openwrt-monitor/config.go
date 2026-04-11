@@ -4,30 +4,32 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Config represents the full HA add-on options.json structure.
 type Config struct {
-	Interval         int                `json:"interval"`
-	GracePeriod      int                `json:"grace_period"`
-	Location         string             `json:"location"`
-	StatusPort       int                `json:"status_port"`
-	MQTTHost         string             `json:"mqtt_host"`
-	MQTTPort         int                `json:"mqtt_port"`
-	MQTTUser         string             `json:"mqtt_user"`
-	MQTTPass         string             `json:"mqtt_password"`
-	UbusUser         string             `json:"ubus_user"`
-	UbusPass         string             `json:"ubus_password"`
-	UbusScheme       string             `json:"ubus_scheme"`
-	Targets          []Target           `json:"targets"`
-	MonitoredDevices []MonitoredDevCfg  `json:"monitored_devices"`
+	Interval         int               `json:"interval"`
+	GracePeriod      int               `json:"grace_period"`
+	Location         string            `json:"location"`
+	StatusPort       int               `json:"status_port"`
+	MQTTHost         string            `json:"mqtt_host"`
+	MQTTPort         int               `json:"mqtt_port"`
+	MQTTUser         string            `json:"mqtt_user"`
+	MQTTPass         string            `json:"mqtt_password"`
+	UbusUser         string            `json:"ubus_user"`
+	UbusPass         string            `json:"ubus_password"`
+	UbusScheme       string            `json:"ubus_scheme"`
+	Targets          []Target          `json:"targets"`
+	MonitoredDevices []MonitoredDevCfg `json:"monitored_devices"`
 }
 
 // Target represents a single OpenWrt device to monitor.
 type Target struct {
-	Host string `json:"host"`
-	Name string `json:"name"`
-	Role string `json:"role"` // "ap", "router", or "both"
+	Host     string `json:"host"`
+	Name     string `json:"name"`
+	Role     string `json:"role"`               // "ap", "router", or "both"
+	Location string `json:"location,omitempty"` // Optional zone/state for AP presence, e.g. "home", "work"
 }
 
 // MonitoredDevCfg represents a device to track online/offline status.
@@ -61,6 +63,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Location == "" {
 		cfg.Location = "home"
 	}
+	cfg.Location = normalizeLocation(cfg.Location)
 	if cfg.StatusPort <= 0 {
 		cfg.StatusPort = 8099
 	}
@@ -69,6 +72,15 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func normalizeLocation(raw string) string {
+	v := strings.ToLower(strings.TrimSpace(raw))
+	v = strings.ReplaceAll(v, " ", "_")
+	if v == "" {
+		return "home"
+	}
+	return v
 }
 
 // APs returns targets with role "ap" or "both".

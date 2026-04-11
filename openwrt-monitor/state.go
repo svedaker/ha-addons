@@ -220,9 +220,11 @@ func (s *State) UpdateHostHints(hints map[string]HostHint) {
 
 // UpdateClients processes a scan result from one AP.
 // seenMACs is the set of MACs seen in this cycle (across all APs).
-func (s *State) UpdateClients(apName string, clients []ScannedClient, now time.Time) {
+func (s *State) UpdateClients(apName string, location string, clients []ScannedClient, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	location = normalizeLocation(location)
 
 	for _, sc := range clients {
 		mac := normMAC(sc.MAC)
@@ -251,6 +253,11 @@ func (s *State) UpdateClients(apName string, clients []ScannedClient, now time.T
 				hostname = resolved
 			}
 		}
+		if hostname == "" || hostname == mac {
+			if alias := s.resolveMonitoredName(mac); alias != "" {
+				hostname = alias
+			}
+		}
 
 		if !found {
 			// New client
@@ -266,19 +273,21 @@ func (s *State) UpdateClients(apName string, clients []ScannedClient, now time.T
 				ConnectedSince: now,
 				LastSeen:       now,
 				LastAP:         apName,
-				Location:       "home",
+				Location:       location,
 				RxRate:         sc.RxRate,
 				TxRate:         sc.TxRate,
 				RxBytes:        sc.RxBytes,
 				TxBytes:        sc.TxBytes,
 			}
-			log.Printf("[presence] %s (%s) transition: away -> home ap=%s", hostnameOrMAC(hostname, mac), mac, apName)
+			log.Printf("[presence] %s (%s) transition: away -> %s ap=%s", hostnameOrMAC(hostname, mac), mac, location, apName)
 		} else {
 			// Existing client
 			if existing.Location == "not_home" {
 				// Coming back — new session
-				log.Printf("[presence] %s (%s) transition: away -> home ap=%s", hostnameOrMAC(hostname, mac), mac, apName)
+				log.Printf("[presence] %s (%s) transition: away -> %s ap=%s", hostnameOrMAC(hostname, mac), mac, location, apName)
 				existing.ConnectedSince = now
+			} else if existing.Location != location {
+				log.Printf("[presence] %s (%s) transition: %s -> %s ap=%s", hostnameOrMAC(hostname, mac), mac, existing.Location, location, apName)
 			}
 			existing.Hostname = hostname
 			existing.IP = ip
@@ -289,7 +298,7 @@ func (s *State) UpdateClients(apName string, clients []ScannedClient, now time.T
 			existing.ConnectedTime = sc.ConnectedTime
 			existing.LastSeen = now
 			existing.LastAP = apName
-			existing.Location = "home"
+			existing.Location = location
 			existing.RxRate = sc.RxRate
 			existing.TxRate = sc.TxRate
 			existing.RxBytes = sc.RxBytes
@@ -309,10 +318,11 @@ func (s *State) MarkAbsent(seenMACs map[string]bool, gracePeriod time.Duration, 
 		}
 
 		absentFor := now.Sub(c.LastSeen)
-		if c.Location == "home" && now.Sub(c.LastSeen) > gracePeriod {
-			log.Printf("[presence] %s (%s) transition: home -> away last_ap=%s last_seen=%s",
+		if c.Location != "not_home" && now.Sub(c.LastSeen) > gracePeriod {
+			log.Printf("[presence] %s (%s) transition: %s -> away last_ap=%s last_seen=%s",
 				hostnameOrMAC(c.Hostname, mac),
 				mac,
+				c.Location,
 				c.LastAP,
 				absentFor.Round(time.Second),
 			)
@@ -519,7 +529,7 @@ func (s *State) UpdateMonitoredDevices(now time.Time) {
 		ip := ""
 		seen := false
 
-		if client, ok := s.clients[mac]; ok && client.Location == "home" {
+		if client, ok := s.clients[mac]; ok && client.Location != "not_home" {
 			ip = client.IP
 			seen = true
 		}
@@ -703,5 +713,12 @@ func (s *State) resolveHostnameByIP(ip string) string {
 		}
 	}
 
+	return ""
+}
+
+func (s *State) resolveMonitoredName(mac string) string {
+	if dev, ok := s.monitoredDevices[mac]; ok && dev.Name != "" {
+		return dev.Name
+	}
 	return ""
 }

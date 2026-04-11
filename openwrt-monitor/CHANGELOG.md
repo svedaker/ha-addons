@@ -1,3 +1,4 @@
+- 0.1.13 Consolidated tracker/presence updates since 0.1.12: reduced log spam, set GOMEMLIMIT to 32 MiB, added presence transition logs, improved monitored device detection for WiFi-associated clients, added per-target location mapping for AP zone-aware tracker states, and unified MQTT device_tracker publishing to avoid duplicates (with tracking_source metadata)
 - 0.1.12 Improve client naming by resolving hostname from host hints or monitored device names via matching IP when lease hostname is missing
 - 0.1.11 Prune stale not_home WiFi clients after 7 days and remove stale MQTT device_tracker discovery entries
 - 0.1.10 Add presence transition logs for WiFi clients when state changes between home and away
