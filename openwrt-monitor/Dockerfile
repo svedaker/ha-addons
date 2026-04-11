@@ -9,7 +9,7 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /bin/openwrt-monitor .
 
 FROM ${BUILD_FROM}
 RUN apk add --no-cache ca-certificates tzdata
-ENV GOMEMLIMIT=64MiB
+ENV GOMEMLIMIT=32MiB
 ENV GOGC=50
 COPY --from=build /bin/openwrt-monitor /bin/openwrt-monitor
 ENTRYPOINT ["/bin/openwrt-monitor"]
